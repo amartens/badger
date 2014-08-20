@@ -1,0 +1,14 @@
+* library of hdl primitives
+* palette of xcos blocks matching primitives
+^  - function to construct library from config file allowing diffs of 
+* ability to pass parameters from xcos blocks to hdl primitives
+	- single values
+	- vectors
+* script to generate HDL from xcos diagram
+	- type propagation
+	- links between primitives
+	- hierachy
+	- clocks
+	- external inputs
+* simulation from xcos environment
+	- type propagation
