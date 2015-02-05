@@ -1,5 +1,5 @@
-badger
-======
+ratel
+=====
 
 xcos to HDL toolbox
 
