@@ -1,6 +1,6 @@
 function [x, y, typ] = outport(job, arg1, arg2)
-  x= []; y = []; typ = [];
-  version = 0.1;
+  x = []; y = []; typ = [];
+  version = 0.3;
   select job
     case 'set' then
       x=arg1;
@@ -26,14 +26,16 @@ function [x, y, typ] = outport(job, arg1, arg2)
 
     case 'define' then
       model = scicos_model();
-      model.blocktype = 'c';
       model.out = 1;
-      model.outtyp = [1];
+      model.outtyp = [-1];
+      outinfo = struct('sign', [-1], 'nbits', [-1], 'binpt', [-1], 'adjust', 'outport_adjust');
       model.in = 1;
-      model.intyp = [1];
+      model.intyp = [6];
+      ininfo = struct('sign', [-1], 'nbits', [-1], 'binpt', [-1]);
       //default settings
       settings = struct();
-      model.opar = list('version', version, 'settings', settings);
+      parameters = struct('version', version, 'settings', settings, 'in', ininfo, 'out', outinfo);
+      model.opar = list(parameters);
       //create scicos block with standard settings
       //TODO make graphics nicer
       x = badger_block_gen([2 1], model, [""], [], [])
