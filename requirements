@@ -1,14 +1,24 @@
-* library of hdl primitives
-* palette of xcos blocks matching primitives
-^  - function to construct library from config file allowing diffs of 
-* ability to pass parameters from xcos blocks to hdl primitives
+A: library of hdl primitives
+
+B: palette of xcos blocks matching primitives
+  - function to construct library from config file allowing diffs of 
+
+C: ability to pass parameters from xcos blocks to hdl primitives
 	- single values
 	- vectors
-* script to generate HDL from xcos diagram
-	- type propagation
-	- links between primitives
-	- hierachy
-	- clocks
-	- external inputs
-* simulation from xcos environment
+
+D: script to generate HDL from xcos diagram
+	1: type propagation
+    1:  every port has an associated width, binary point and data type
+        parameter (TODO vectors).
+    2:  input port's type, width are determined by input link.
+    3:  some blocks have explicit output types, others have output types
+        determined implicitly from input types.
+
+	2: links between primitives
+	3: hierachy
+	4: clocks
+	5: external inputs
+
+E: simulation from xcos environment
 	- type propagation
