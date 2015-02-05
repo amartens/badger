@@ -9,6 +9,7 @@ module add_tb;
   reg [N_BITS_A-1:0] a;
   reg [N_BITS_B-1:0] b;
   wire [N_BITS_OUT-1:0] sum;
+
   
   initial begin
     a = 3'b0_0_0;         //      0 

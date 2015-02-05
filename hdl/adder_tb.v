@@ -1,16 +1,16 @@
 module adder_tb;
-  parameter N_BITS_A = 3;
-  parameter BIN_PT_A = 1;
-  parameter SIGNED_A = 1;
-  parameter N_BITS_B = 4;
-  parameter BIN_PT_B = 3;
-  parameter SIGNED_B = 0;
-  parameter N_BITS_OUT = 6;
-  parameter BIN_PT_OUT = 3;
+  parameter A_N_BITS = 3;
+  parameter A_BIN_PT = 1;
+  parameter A_DTYPE = 1;
+  parameter B_N_BITS = 4;
+  parameter B_BIN_PT = 3;
+  parameter B_DTYPE = 0;
+  parameter SUM_AB_N_BITS = 6;
+  parameter SUM_AB_BIN_PT = 3;
 
-  reg [N_BITS_A-1:0] a;
-  reg [N_BITS_B-1:0] b;
-  wire [N_BITS_OUT-1:0] sum;
+  reg [A_N_BITS-1:0] a;
+  reg [B_N_BITS-1:0] b;
+  wire [SUM_AB_N_BITS-1:0] sum;
   
   initial begin
     a = 3'b0_0_0;         //      0 
@@ -32,16 +32,16 @@ module adder_tb;
     $finish;
   end //initial
 
-  adder #(.N_BITS_A(N_BITS_A),  
-        .BIN_PT_A(BIN_PT_A),
-        .SIGNED_A(SIGNED_A),  
-        .N_BITS_B(N_BITS_B),
-        .BIN_PT_B(BIN_PT_B),
-        .SIGNED_B(SIGNED_B),
-        .N_BITS_OUT(N_BITS_OUT),
-        .BIN_PT_OUT(BIN_PT_OUT)) a0 (a, b, sum);
+  adder #(.A_N_BITS(A_N_BITS),  
+        .A_BIN_PT(A_BIN_PT),
+        .A_DTYPE(A_DTYPE),  
+        .B_N_BITS(B_N_BITS),
+        .BIN_PT_B(B_BIN_PT_B),
+        .B_DTYPE(B_DTYPE),
+        .SUM_AB_N_BITS(SUM_AB_N_BITS),
+        .SUM_AB_BIN_PT(SUM_AB_BIN_PT)) a0 (a, b, sum);
   
   initial begin
-	  $monitor("%t, a = \t(%d,%d)b'%b\t a_padded = \t(%d,%d)b'%b\n%t, b = \t(%d,%d)b'%b\t b_padded = \t(%d,%d)b'%b\n%t, sum = \t\t\t\t\t(%d,%d)b'%b", $time, N_BITS_A, BIN_PT_A, a, N_BITS_OUT, BIN_PT_OUT, a0.add0.a_padded, $time, N_BITS_B, BIN_PT_B, b, N_BITS_OUT, BIN_PT_OUT, a0.add0.b_padded, $time, N_BITS_OUT, BIN_PT_OUT, sum);
+	  $monitor("%t, a = \t(%d,%d)b'%b\t a_padded = \t(%d,%d)b'%b\n%t, b = \t(%d,%d)b'%b\t b_padded = \t(%d,%d)b'%b\n%t, sum = \t\t\t\t\t(%d,%d)b'%b", $time, A_N_BITS, A_BIN_PT, a, SUM_AB_N_BITS, SUM_AB_BIN_PT, a0.add0.a_padded, $time, B_N_BITS, B_BIN_PT, b, SUM_AB_N_BITS_OUT, SUM_AB_BIN_PT, a0.add0.b_padded, $time, SUM_AB_N_BITS, SUM_AB_BIN_PT, sum);
   end
 endmodule //add_tb
