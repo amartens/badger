@@ -97,6 +97,6 @@ function [x, y, typ] = inport(job, arg1, arg2)
       //create scicos block with standard settings
   
       //TODO input and output labels 
-      x = badger_block_gen([2 1], model, [""], [], []);
+      x = ratel_block_gen([2 1], model, [""], [], []);
   end
 endfunction

@@ -6,7 +6,7 @@ function [status] = ratel_gen()
 
   //delete if already loaded
   try
-    xcosPalDelete('badger');
+    xcosPalDelete('ratel');
   catch
   end
 
@@ -16,7 +16,7 @@ function [status] = ratel_gen()
 //  if (status != %t) then
     //TODO
 //  end
-  [status, msg] = xcosPalAdd(basic_pal, 'badger');
+  [status, msg] = xcosPalAdd(basic_pal, 'ratel');
 //  if (status != %t) then
     //TODO
 //  end
@@ -27,7 +27,7 @@ function [status] = ratel_gen()
 //  if (status != %t) then
     //TODO
 //  end
-  [status, msg] = xcosPalAdd(math_pal, 'badger');
+  [status, msg] = xcosPalAdd(math_pal, 'ratel');
 //  if (status != %t) then
     //TODO
 //  end

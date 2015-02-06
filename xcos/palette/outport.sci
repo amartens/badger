@@ -38,6 +38,6 @@ function [x, y, typ] = outport(job, arg1, arg2)
       model.opar = list(parameters);
       //create scicos block with standard settings
       //TODO make graphics nicer
-      x = badger_block_gen([2 1], model, [""], [], [])
+      x = ratel_block_gen([2 1], model, [""], [], [])
   end
 endfunction

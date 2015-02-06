@@ -54,6 +54,6 @@ function [x, y, typ] = add(job, arg1, arg2)
         'in', ininfo, ...
         'out', outinfo);
       model.opar = list(parameters);
-      x = badger_block_gen([2 2], model, [''], ['a';'b'], ['a+b']);
+      x = ratel_block_gen([2 2], model, [''], ['a';'b'], ['a+b']);
   end //select
 endfunction
