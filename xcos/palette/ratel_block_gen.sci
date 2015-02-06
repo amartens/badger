@@ -1,4 +1,4 @@
-function o=badger_block_gen(sz, model, exprs, in_labels, out_labels)
+function o=ratel_block_gen(sz, model, exprs, in_labels, out_labels)
 //initialize graphic part of the block data structure
 
   gr_i=[];

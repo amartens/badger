@@ -1,5 +1,5 @@
 //used to generate badger palette
-function [status] = badger_gen()
+function [status] = ratel_gen()
   status = %f;
 
   loadXcosLibs;
