@@ -1,6 +1,7 @@
 function[ok, indices] = find_blocks_of_type(gui_name, diagram, levels)
-//goes through diagram, finding Blocks with specified type
+//goes through diagram, finding Blocks with specified gui type
 //optionally decends into subsystems to a depth specified by levels
+//use %Inf to descend to all levels
   ok = %F; indices = list();
   fname = 'find_blocks_of_type';
 
@@ -14,7 +15,7 @@ function[ok, indices] = find_blocks_of_type(gui_name, diagram, levels)
         indices($+1) = block_index;
       end
       
-      //if we have a superblock and been told to descend into it via levels parameter
+      //if we have a superblock and have been told to descend into it via levels parameter
       if (strcmp(block_type, 'SUPER_f') == 0) & (levels > 0) then
         //get indices from subsystem
         [ko, super_indices] = find_blocks_of_type(gui_name, obj.model.rpar, levels-1);
@@ -35,4 +36,4 @@ function[ok, indices] = find_blocks_of_type(gui_name, diagram, levels)
   end //for
 
   ok = %T;
-endfunction //ratel_find_blocks_of_type
+endfunction //find_blocks_of_type
