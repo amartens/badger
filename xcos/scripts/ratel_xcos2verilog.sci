@@ -1,108 +1,140 @@
-function [result] = ratel_xcos2verilog(model_path, output_directory)
+function [ok] = ratel_xcos2verilog(model_path, output_directory)
 //function converting an xcos model using ratel library blocks to verilog
-  result = %F;
+  ok = %F;
   //for logging
   fname = 'ratel_xcos2verilog';
 
   //TODO error checking
   
   //open model (handle in scs_m after load)
-  result = importXcosDiagram(model_path);
-  if or([result == %F, isdef('scs_m') == %F]) then
+  ko = importXcosDiagram(model_path);
+  if ko == %F | ~isdef('scs_m') then
     msg = msprintf('Error importing %s\n', model_path);
     ratel_log(msg, [fname, 'error']);
     return;
   end //if
 
   //we run c_pass1 to do certain connectivity checks and 'flatten' structure
-  [blklst, connectmat, ccmat, cor, corinv, ok]=c_pass1(scs_m);  
-  if ~ok then
+  [blklst, connectmat, ccmat, cor, corinv, ko]=c_pass1(scs_m);  
+  if ~ko then
     ratel_log('error in first pass\n', [fname, 'error']);
     return;
   end
  
   //adjust size of vector passed through ports 
-  ratel_log('adjusting inout\n', [fname, 'trace']);
-  [ok,blklst]=ratel_adjust_inout(blklst,connectmat)
-  if ~ok then
+  ratel_log('adjusting inout\n', [fname]);
+  [ko, blklst]=ratel_adjust_inout(blklst, connectmat)
+  if ~ko then
     ratel_log('error adjusting port inout\n', [fname, 'error']);
     return;
   end
   
   //adjust type of input/output ports
-  ratel_log('adjusting type\n', [fname, 'trace']);
-  [ok, blklst]=ratel_adjust_typ(blklst, connectmat)
-  
-  if ~ok then
+  ratel_log('adjusting type\n', [fname]);
+  [ko, blklst]=ratel_adjust_typ(blklst, connectmat)
+  if ~ko then
     ratel_log('error adjusting port type\n', [fname, 'error']);
     return;
   end
 
   //adjust fixed point info for blocks
-  ratel_log('adjusting fixed point info\n', [fname, 'trace']);
-  [ok, blklst] = ratel_adjust_fp(blklst, connectmat)
-
-  if ~ok then
+  ratel_log('adjusting fixed point info\n', [fname]);
+  [ko, blklst] = ratel_adjust_fp(blklst, connectmat)
+  if ~ko then
     ratel_log('error adjusting fixed point info\n', [fname, 'error']);
     return;
   end
 
   //change directory to target
-  ok = chdir(output_directory);
-
-  if ~ok,
+  msg = msprintf('changing into %s from %s\n', output_directory, pwd());
+  ratel_log(msg, [fname]);
+  ko = chdir(output_directory);
+  if ~ko,
     msg = msprintf('error changing current directory to %s\n', output_directory);
     ratel_log(msg, [fname, 'error']);
     return;
   end  
+  
+  msg = msprintf('iterating through diagram %s\n', module_name);
+//  ko = ratel_diagram2verilog(scs_m, blklst, cor, corinv, connectmat);
 
-  //TODO MS uses '\'
-  name_tokens = tokens(model_path, ['/']);  
-  file_name = tokens(name_tokens($), ['.']);  //take last item of path
-  module_name = file_name(1);                 //take first item before '.'
+  ok = %T;
+endfunction //ratel_xcos2verilog
+
+function[ok] = ratel_diagram2verilog(diagram, blklst, cor, corinv, connectmat, target)
+//generates hierachical verilog for an xcos diagram
+//each superblock is contained in a top.v file in the directory of its parent
+//diagram = top level xcos diagram (e.g scs_m)
+//blklst = blocks contained in flattened, and updated structure (c_pass1)
+//cor = matrix giving index of diagram block in blklst (c_pass1)
+//corinv = matrix giving index of blklst block in diagram
+//connectmat = connection matrix (as output from c_pass1)
+//target = path to superblock to be processed
+
+  ok = %f;
+  fname = 'ratel_diagram2verilog';  
+
+  if strcmp(typeof(diagram, 'diagram')),
+    msg = msprintf('diagram passed not of correct type %s\n');
+    ratel_log(msg, [fname, 'error']);
+  end
+  //TODO more error checking
 
   //TODO back up current design?
 
-  //create directory with top module name
-  result = mkdir(module_name);
+  diagname = diagram.props.title; 
 
-  //TODO error checking 
+  //create directory based on diagram name
+  //we create a special directory as we may place other things here in future
+  msg = msprintf('creating %s\n', diagname);
+  ratel_log(msg, [fname]);
+  ko = mkdir(diagname);
+  if ~ko,
+    msg = msprintf('error creating directory %s while in %s\n', diagname, pwd());
+    ratel_log(msg, [fname, 'error']);
+    return;
+  end 
+ 
+  msg = msprintf('changing directory to %s\n', diagname);
+  ko = chdir(diagname);
+  if ~ko,
+    msg = msprintf('error changing current directory to %s from %s\n', diagname, pwd());
+    ratel_log(msg, [fname, 'error']);
+    return;
+  end
 
-  //now go through all objects in original design
-  //we use this instead of the flattened design as we
-  //need to preserve hierachy
-  //also, the block identity is not available from the model structure
-  //but is from the gui variable on the object
-  //(perhaps we could use the model's sim parameter?)
-
-  objects = scs_m.objs;
   //create or clear file for writing
-  [fd, err] = mopen(filename, 'w');
+  [fd, err] = mopen('top.v', 'w');
+  //TODO error checking
+
+  //find all IN_f and OUT_f ports
+  //find all inport and outport ports
+  //TODO find all GOTO
 
   //verilog intro
-  [result] = ratel_verilog_intro(fd, module_name, ports);
+  [result] = ratel_verilog_intro(fd, diagname, ports);
 
   //create ports
-  [ok] = ratel_ports2verilog(fd, ports);
-  if ~ok then
-    ratel_log('error translating ports\n', [fname, 'error']);
-    return;
-  end //if
-  mfprintf(fd, '\n');
+//  [ko] = ratel_ports2verilog(fd, in_f, out_f, inports, outports);
+//  if ~ok then
+//    ratel_log('error translating ports\n', [fname, 'error']);
+//    return;
+//  end //if
+//  mfprintf(fd, '\n');
 
   //create links
-  [ok] = ratel_links2verilog(fd, links, objects);
-  if ~ok then
-    ratel_log('error translating links\n', [fname, 'error']);
-    return;
-  end //if
+  //[ok] = ratel_links2verilog(fd, links, objects);
+  //if ~ok then
+  //  ratel_log('error translating links\n', [fname, 'error']);
+  //  return;
+  //end //if
 
   //create blocks
-  [ok] = ratel_blocks2verilog(fd, blocks, links); 
-  if ~ok then
-    ratel_log('error translating blocks\n', [fname, 'error']);
-    return;
-  end //if
+  //[ok] = ratel_blocks2verilog(fd, blocks, links); 
+  //if ~ok then
+  //  ratel_log('error translating blocks\n', [fname, 'error']);
+  //  return;
+  //end //if
 
   //verilog epilogue
   [ok] = ratel_verilog_epilogue(fd, module_name);
@@ -114,10 +146,7 @@ function [result] = ratel_xcos2verilog(model_path, output_directory)
   //close file
   mclose(fd);
 
-  result = %T;
-endfunction //ratel_xcos2verilog
-
-function[ok] = ratel_diagram2verilog(diagram)
+endfunction //ratel_diagram2verilog
 
 function[ok] = ratel_verilog_intro(fd, module_name, ports)
 //generate the start of a verilog file
@@ -136,6 +165,40 @@ function[ok] = ratel_verilog_intro(fd, module_name, ports)
   ok = %T;
 endfunction //ratel_verilog_intro
 
+function[ok] = ratel_ports2verilog(fd, in_f, out_f, inports, outports)
+//convert ports of different types to verilog
+  ok = %F;
+  fname = 'ratel_ports2verilog';
+  for port_index = 1:length(ports),
+    port = ports(port_index);
+    block_type = port.gui;
+    if (strcmp(block_type, "inport") == 0) then 
+      mfprintf(fd, '\tinput');
+    elseif (strcmp(block_type, "outport") == 0) then 
+      mfprintf(fd, '\toutput');        
+    else
+      msg = msprintf('Unknown port of type %s found', block_type); 
+      ratel_log(msg, [fname, 'error']);
+      return;
+    end //if
+
+    //all ports are wires
+    mfprintf(fd, ' wire');
+    
+    //find port size
+    if (strcmp(block_type, "inport") == 0) then 
+      model = port.model;
+      parameters = model.opar(1);
+      mfprintf(fd, ' [%d-1:0]', parameters.out.nbits);
+    end //if
+    
+    //find port label
+    graphics = port.graphics;
+    label = graphics.exprs(1);
+    mfprintf(fd, ' %s;\n', label);
+  end //for
+  ok = %T;
+endfunction //ratel_ports2verilog
 
 function[ok] = ratel_verilog_epilogue(fd, module_name)
   ok = %F;
@@ -197,39 +260,6 @@ function[ok] = ratel_links2verilog(fd, links, objects)
   ok = %T;
 endfunction //ratel_links2verilog
 
-function[ok] = ratel_ports2verilog(fd, ports)
-//convert inport and outports to verilog
-  ok = %F;
-  fname = 'ratel_ports2verilog';
-  for port_index = 1:length(ports),
-    port = ports(port_index);
-    block_type = port.gui;
-    if (strcmp(block_type, "inport") == 0) then 
-      mfprintf(fd, '\tinput');
-    elseif (strcmp(block_type, "outport") == 0) then 
-      mfprintf(fd, '\toutput');        
-    else
-      msg = msprintf('Unknown port of type %s found', block_type); 
-      ratel_log(msg, [fname, 'error']);
-      return;
-    end //if
 
-    //all ports are wires
-    mfprintf(fd, ' wire');
-    
-    //find port size
-    if (strcmp(block_type, "inport") == 0) then 
-      model = port.model;
-      parameters = model.opar(1);
-      mfprintf(fd, ' [%d-1:0]', parameters.out.nbits);
-    end //if
-    
-    //find port label
-    graphics = port.graphics;
-    label = graphics.exprs(1);
-    mfprintf(fd, ' %s;\n', label);
-  end //for
-  ok = %T;
-endfunction //ratel_ports2verilog
 
 
