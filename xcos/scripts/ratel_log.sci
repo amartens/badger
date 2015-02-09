@@ -6,17 +6,17 @@ function[ok] = ratel_log(msg, groups)
 
   //type checking
   if strcmp(typeof(msg), 'string') ~= 0 then
-    mprintf('[ratel_log, error] msg must be a string');
+    mprintf('[ratel_log, error] msg must be a string\n');
     return;
   end
   [r,c] = size(msg);
   if r ~= 1 then
-    mprintf('[ratel_log, error] msg string must be a single string');
+    mprintf('[ratel_log, error] msg string must be a single string\n');
     return;
   end 
 
   if strcmp(typeof(groups), 'string') ~= 0 then
-    mprintf('[ratel_log, error] log groups must be a string');
+    mprintf('[ratel_log, error] log groups must be a string\n');
     return;
   end
 
