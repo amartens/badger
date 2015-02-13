@@ -20,11 +20,11 @@ function[ok, indices] = find_blocks_of_type(gui_name, diagram, levels)
         //get indices from subsystem
         [ko, super_indices] = find_blocks_of_type(gui_name, obj.model.rpar, levels-1);
         if ~ko,
-          msg = msprintf('error getting indices of %s blocks from superblock\n', gui_name);
-          ratel_log(msg, [fname, 'error']);
+          msg = msprintf('error getting indices of %s blocks from superblock', gui_name);
+          ratel_log(msg, [fname+'\n', 'error']);
         end //if
-        msg = msprintf('found %d indices\n', length(super_indices));
-        ratel_log(msg, [fname, 'debug']);
+        msg = msprintf('found %d indices', length(super_indices));
+        ratel_log(msg, [fname+'\n', 'debug']);
 
         //append new lookup indices to those already found
         for super_idx = 1:length(super_indices),

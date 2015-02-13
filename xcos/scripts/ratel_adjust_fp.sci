@@ -20,8 +20,8 @@ function[ok, bllst] = ratel_adjust_fp(bllst, connectmat)
         //blocks use fixed point
         outbt = outblk.blocktype; inbt = inblk.blocktype;
         if (strcmp(outbt, 'f') == 0) & (strcmp(inbt, 'f') == 0) then
-          msg = msprintf('processing fixed point link between %d and %d\r\n', connectmat(jj,1), connectmat(jj,3));  
-          ratel_log(msg, [fname, 'test']);
+          msg = msprintf('processing fixed point link between %d and %d', connectmat(jj,1), connectmat(jj,3));  
+          ratel_log(msg+'\n', [fname]);
           //in/outinfo are parameter structs for blocks
           //containing fixed point info for ports
           outinfo = outblk.opar(1).out; ininfo = inblk.opar(1).in;
@@ -54,10 +54,11 @@ function[ok, bllst] = ratel_adjust_fp(bllst, connectmat)
             inbinpt = ininfo.binpt(iport_idx);
           end
 
-          msg = msprintf('out: sign(%d) (%d,%d)\n', outsign, outnbits, outbinpt);   
-          ratel_log(msg, [fname, 'test']);
-          msg = msprintf('in: sign(%d) (%d,%d)\n', insign, innbits, inbinpt);   
-          ratel_log(msg, [fname, 'test']);
+	  ratel_log('before:\n', [fname]);
+          msg = msprintf('out: sign(%d) (%d,%d)', outsign, outnbits, outbinpt);   
+          ratel_log(msg+'\n', [fname]);
+          msg = msprintf('in: sign(%d) (%d,%d)', insign, innbits, inbinpt);   
+          ratel_log(msg+'\n', [fname]);
 
           //if outsign < 0 | outnbits < 0 | outbinpt < 0 then
           //  outcalc = outinfo.outcalc;  //function to calculate out info
@@ -104,6 +105,13 @@ function[ok, bllst] = ratel_adjust_fp(bllst, connectmat)
           else
             ok = %F;
           end
+	  
+          insign = ininfo.sign(iport_idx); 
+          innbits = ininfo.nbits(iport_idx); 
+          inbinpt = ininfo.binpt(iport_idx);
+	  ratel_log('after:\n', [fname]);
+          msg = msprintf('in: sign(%d) (%d,%d)', insign, innbits, inbinpt);   
+          ratel_log(msg+'\n', [fname]);
 
           inblk.opar(1).in = ininfo;
           bllst(connectmat(jj,3)) = inblk;  

@@ -7,14 +7,16 @@ function [ok] = ratel_xcos2verilog(model_path, output_directory)
   //TODO error checking
   
   //open model (handle in scs_m after load)
+  ratel_log(msprintf('importing %s', model_path)+'\n' , [fname]);
   ko = importXcosDiagram(model_path);
   if ko == %F | ~isdef('scs_m') then
-    msg = msprintf('Error importing %s\n', model_path);
-    ratel_log(msg, [fname, 'error']);
+    msg = msprintf('Error importing %s', model_path);
+    ratel_log(msg, [fname+'\n', 'error']);
     return;
   end //if
 
   //we run c_pass1 to do certain connectivity checks and 'flatten' structure
+  ratel_log('running c_pass1\n', [fname]);
   [blklst, connectmat, ccmat, cor, corinv, ko]=c_pass1(scs_m);  
   if ~ko then
     ratel_log('error in first pass\n', [fname, 'error']);
@@ -46,24 +48,23 @@ function [ok] = ratel_xcos2verilog(model_path, output_directory)
   end
 
   //change directory to target
-  msg = msprintf('changing into %s from %s\n', output_directory, pwd());
-  ratel_log(msg, [fname]);
+  msg = msprintf('changing into %s from %s', output_directory, pwd());
+  ratel_log(msg+'\n', [fname]);
   ko = chdir(output_directory);
   if ~ko,
-    msg = msprintf('error changing current directory to %s\n', output_directory);
-    ratel_log(msg, [fname, 'error']);
+    msg = msprintf('error changing current directory to %s', output_directory);
+    ratel_log(msg, [fname+'\n', 'error']);
     return;
   end  
   
-  msg = msprintf('iterating through diagram %s\n', module_name);
-//  ko = ratel_diagram2verilog(scs_m, blklst, cor, corinv, connectmat);
+  ratel_log(msprintf('generating hdl for diagram %s', model_path)+'\n', [fname]);
+  ko = ratel_diagram2verilog(scs_m, blklst, cor, corinv, connectmat, []);
 
   ok = %T;
 endfunction //ratel_xcos2verilog
 
-function[ok] = ratel_diagram2verilog(diagram, blklst, cor, corinv, connectmat, target)
+function[ok] = ratel_diagram2verilog(top_diagram, blklst, cor, corinv, connectmat, target)
 //generates hierachical verilog for an xcos diagram
-//each superblock is contained in a top.v file in the directory of its parent
 //diagram = top level xcos diagram (e.g scs_m)
 //blklst = blocks contained in flattened, and updated structure (c_pass1)
 //cor = matrix giving index of diagram block in blklst (c_pass1)
@@ -74,45 +75,81 @@ function[ok] = ratel_diagram2verilog(diagram, blklst, cor, corinv, connectmat, t
   ok = %f;
   fname = 'ratel_diagram2verilog';  
 
-  if strcmp(typeof(diagram, 'diagram')),
-    msg = msprintf('diagram passed not of correct type %s\n');
-    ratel_log(msg, [fname, 'error']);
+  if strcmp(typeof(top_diagram), 'diagram'),
+    ratel_log(msprintf('%s passed instead of diagram', typeof(top_diagram))+'\n', [fname, 'error']);
+    return;
   end
+  
   //TODO more error checking
 
   //TODO back up current design?
-
+ 
+  //locate diagram within top_diagram based on target index
+  ratel_log('locating diagram \n', [fname]);
+  diagram = top_diagram;
+  for index = 1:length(target),
+    offset = target(index);
+    if offset > length(diagram.objs),
+      msg = msprintf('block with offset %d does not exist in %s', offset, diagram.props.title);
+      ratel_log(msg, [fname+'\n', 'error']);
+      return;
+    end
+    //check that it is a diagram
+    obj = diagram.objs(offset);
+    if strcmp(typeof(obj), 'diagram'),
+      msg = msprintf('block with offset %d in %s not a diagram as required', offset, diagram.props.title);
+      ratel_log(msg, [fname+'\n', 'error']);
+      return;
+    end
+    diagram = obj.model.rpar;
+  end
+ 
   diagname = diagram.props.title; 
 
   //create directory based on diagram name
   //we create a special directory as we may place other things here in future
-  msg = msprintf('creating %s\n', diagname);
-  ratel_log(msg, [fname]);
+  ratel_log(msprintf('creating %s', diagname)+'\n', [fname]);
   ko = mkdir(diagname);
   if ~ko,
-    msg = msprintf('error creating directory %s while in %s\n', diagname, pwd());
-    ratel_log(msg, [fname, 'error']);
+    ratel_log(msprintf('error creating directory %s while in %s', diagname, pwd())+'\n',[fname, 'error']);
     return;
   end 
- 
-  msg = msprintf('changing directory to %s\n', diagname);
+
+  //go into directory we just created 
+  ratel_log(msprintf('changing directory to %s', diagname)+'\n', [fname]);
   ko = chdir(diagname);
   if ~ko,
-    msg = msprintf('error changing current directory to %s from %s\n', diagname, pwd());
-    ratel_log(msg, [fname, 'error']);
+    msg = msprintf('error changing current directory to %s from %s', diagname, pwd());
+    ratel_log(msg, [fname+'\n', 'error']);
     return;
   end
 
-  //create or clear file for writing
+  //create or clear top file for writing
+  ratel_log(msprintf('creating top.v for %s', diagname)+'\n', [fname]);
   [fd, err] = mopen('top.v', 'w');
   //TODO error checking
 
-  //find all IN_f and OUT_f ports
+  //find all IN_f and OUT_f ports in top level
+  ratel_log(msprintf('finding IN_f in %s ...', diagname), [fname]);
+  [ko, in_f] = find_blocks_of_type('IN_f', diagram, 0); 
+  if ~ko, 
+    ratel_log(msprintf('error while finding IN_f in %d', diagname)+'\n', [fname, 'error']);
+    return
+  end
+  ratel_log(msprintf('found %d', length(in_f))+'\n', [fname]);
+  ratel_log(msprintf('finding OUT_f in %s ...', diagname), [fname]);
+  [ko, out_f] = find_blocks_of_type('OUT_f', diagram, 0); 
+  if ~ko, 
+    ratel_log(msprintf('error while finding OUT_f in %d', diagname)+'\n', [fname, 'error']);
+    return
+  end
+  ratel_log(msprintf('found %d', length(out_f))+'\n', [fname]);
+
   //find all inport and outport ports
   //TODO find all GOTO
 
   //verilog intro
-  [result] = ratel_verilog_intro(fd, diagname, ports);
+//  [result] = ratel_verilog_intro(fd, diagname, ports);
 
   //create ports
 //  [ko] = ratel_ports2verilog(fd, in_f, out_f, inports, outports);
@@ -131,17 +168,17 @@ function[ok] = ratel_diagram2verilog(diagram, blklst, cor, corinv, connectmat, t
 
   //create blocks
   //[ok] = ratel_blocks2verilog(fd, blocks, links); 
-  //if ~ok then
+  //if ~ok ten
   //  ratel_log('error translating blocks\n', [fname, 'error']);
   //  return;
   //end //if
 
   //verilog epilogue
-  [ok] = ratel_verilog_epilogue(fd, module_name);
+  [ok] = ratel_verilog_epilogue(fd, diagname);
   if ~ok then
-    ratel_log('error writing epilogue\n', [fname, 'error']);
+    ratel_log(msprintf('error writing epilogue for %s', diagname) + '\n', [fname, 'error']);
     return;
-  end //if_
+  end //if
 
   //close file
   mclose(fd);
@@ -178,7 +215,7 @@ function[ok] = ratel_ports2verilog(fd, in_f, out_f, inports, outports)
       mfprintf(fd, '\toutput');        
     else
       msg = msprintf('Unknown port of type %s found', block_type); 
-      ratel_log(msg, [fname, 'error']);
+      ratel_log(msg, [fname+'\n', 'error']);
       return;
     end //if
 
@@ -237,14 +274,14 @@ function[ok] = ratel_links2verilog(fd, links, objects)
 
     if source_index > length(objects) then
       msprintf('source index (%d) for link (%d) exceeds number of blocks (%d)', source_index, link_index, length(objects));
-      ratel_log(msg, [fname, 'error']);
+      ratel_log(msg+'\n', [fname, 'error']);
       return;
     end
 
     source_block = objects(source_index);
     //TODO not enough to check for valid ratel block
     if strcmp(typeof(source_block), 'Block') ~= 0,
-      ratel_log('not a valid ratel block', [fname, 'error']);
+      ratel_log('not a valid ratel block\n', [fname, 'error']);
     end
     graphics = source_block.graphics;
     label = graphics.exprs(1);

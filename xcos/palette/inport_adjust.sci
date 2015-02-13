@@ -3,7 +3,7 @@ function [x] = inport_adjust(job, arg1)
   x = [];
   select job
     case 'adjust' then
-      ratel_log('calculating input data info', [fname]);
+      ratel_log('calculating input data info\n', [fname]);
       x = arg1; //do nothing
     end
 endfunction

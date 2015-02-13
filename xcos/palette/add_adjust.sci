@@ -3,7 +3,7 @@ function [x] = add_adjust(job, arg1)
   x = [];
   select job
     case 'adjust' then
-      ratel_log('calculating output data info', [fname]);
+      ratel_log('calculating output data info\n', [fname]);
       x = arg1;
       parameters = x.opar(1);
       ininfo = parameters.in;
