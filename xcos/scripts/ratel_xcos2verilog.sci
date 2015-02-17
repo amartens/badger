@@ -131,25 +131,44 @@ function[ok] = ratel_diagram2verilog(top_diagram, blklst, cor, corinv, connectma
 
   //find all IN_f and OUT_f ports in top level
   ratel_log(msprintf('finding IN_f in %s ...', diagname), [fname]);
-  [ko, in_f] = find_blocks_of_type('IN_f', diagram, 0); 
+  [ko, in_fs] = find_blocks_of_type('IN_f', diagram, 0); 
   if ~ko, 
     ratel_log(msprintf('error while finding IN_f in %d', diagname)+'\n', [fname, 'error']);
     return
   end
-  ratel_log(msprintf('found %d', length(in_f))+'\n', [fname]);
+  ratel_log(msprintf('found %d', length(in_fs))+'\n', [fname]);
+
   ratel_log(msprintf('finding OUT_f in %s ...', diagname), [fname]);
-  [ko, out_f] = find_blocks_of_type('OUT_f', diagram, 0); 
+  [ko, out_fs] = find_blocks_of_type('OUT_f', diagram, 0); 
   if ~ko, 
     ratel_log(msprintf('error while finding OUT_f in %d', diagname)+'\n', [fname, 'error']);
     return
   end
-  ratel_log(msprintf('found %d', length(out_f))+'\n', [fname]);
+  ratel_log(msprintf('found %d', length(out_fs))+'\n', [fname]);
 
-  //find all inport and outport ports
+  //find all inport and outport ports in top level
+  ratel_log(msprintf('finding inport in %s ...', diagname), [fname]);
+  [ko, inports] = find_blocks_of_type('inport', diagram, 0); 
+  if ~ko, 
+    ratel_log(msprintf('error while finding inport in %d', diagname)+'\n', [fname, 'error']);
+    return
+  end
+  ratel_log(msprintf('found %d', length(inports))+'\n', [fname]);
+
+  ratel_log(msprintf('finding outport in %s ...', diagname), [fname]);
+  [ko, outports] = find_blocks_of_type('outport', diagram, 0); 
+  if ~ko, 
+    ratel_log(msprintf('error while finding outport in %d', diagname)+'\n', [fname, 'error']);
+    return
+  end
+  ratel_log(msprintf('found %d', length(outports))+'\n', [fname]);
+  
   //TODO find all GOTO
 
   //verilog intro
-//  [result] = ratel_verilog_intro(fd, diagname, ports);
+  ratel_log('generating verilog intro\n', [fname]);
+  port_indices = [in_fs; out_fs; inports; outports];
+  [ko] = ratel_verilog_intro(fd, diagname, port_indices, blklst, );
 
   //create ports
 //  [ko] = ratel_ports2verilog(fd, in_f, out_f, inports, outports);
@@ -174,8 +193,8 @@ function[ok] = ratel_diagram2verilog(top_diagram, blklst, cor, corinv, connectma
   //end //if
 
   //verilog epilogue
-  [ok] = ratel_verilog_epilogue(fd, diagname);
-  if ~ok then
+  [ko] = ratel_verilog_epilogue(fd, diagname);
+  if ~ko then
     ratel_log(msprintf('error writing epilogue for %s', diagname) + '\n', [fname, 'error']);
     return;
   end //if
@@ -183,9 +202,11 @@ function[ok] = ratel_diagram2verilog(top_diagram, blklst, cor, corinv, connectma
   //close file
   mclose(fd);
 
+  ok = %t;
+
 endfunction //ratel_diagram2verilog
 
-function[ok] = ratel_verilog_intro(fd, module_name, ports)
+function[ok] = ratel_verilog_intro(fd, module_name, port_indices)
 //generate the start of a verilog file
   ok = %F; 
 
