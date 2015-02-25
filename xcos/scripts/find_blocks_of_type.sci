@@ -1,8 +1,8 @@
 function[ok, blocks, indices] = find_blocks_of_type(gui_name, diagram, levels)
 //goes through diagram, finding Blocks with specified gui type
-//optionally decends into subsystems to a depth specified by levels
-//use %Inf to descend to all levels
-  ok = %F; indices = list(); blocks = list();
+//optionally descends into subsystems to a depth specified by levels
+//use %Inf to descend to all levels, 0 for only top level
+  ok = %f; indices = list(); blocks = list();
   fname = 'find_blocks_of_type';
   diagname = diagram.props.title;
 
@@ -51,6 +51,5 @@ function[ok, blocks, indices] = find_blocks_of_type(gui_name, diagram, levels)
     ratel_log(msprintf('block indices different length to blocks when finding %s', gui_name)+'\n', [fname, 'error']);
     return
   end
-  ok = %T;
-
+  ok = %t;
 endfunction //find_blocks_of_type
