@@ -1,3 +1,62 @@
+function [ok, adjusted_diagram] = adjust_diagram(diagram)
+//various diagram sanity checks, determines port types etc
+//returns updated diagram
+  
+  ok = %f; adjusted_diagram = diagram;
+  //for logging
+  fname = 'adjust_diagram';
+
+  if strcmp(typeof(diagram), 'diagram'),
+    ratel_log(msprintf('%s passed instead of diagram', typeof(diagram))+'\n', [fname, 'error']);
+    return;
+  end
+
+  //we run c_pass1 to do certain connectivity checks and 'flatten' structure
+  ratel_log(msprintf('running c_pass1 on %s', diagram.props.title)+'\n', [fname]);
+  [blklst, connectmat, ccmat, cor, corinv, ko]=c_pass1(diagram);  
+  if ~ko then
+    ratel_log('error in first pass\n', [fname, 'error']);
+    return;
+  end
+ 
+  //adjust size of vector passed through ports 
+  ratel_log('adjusting inout\n', [fname]);
+  [ko, blklst]=adjust_inout(blklst, connectmat)
+  if ~ko then
+    ratel_log('error adjusting port inout\n', [fname, 'error']);
+    return;
+  end
+  
+  //adjust type of input/output ports
+  ratel_log('adjusting type\n', [fname]);
+  [ko, blklst]=adjust_typ(blklst, connectmat)
+  if ~ko then
+    ratel_log('error adjusting port type\n', [fname, 'error']);
+    return;
+  end
+
+  //adjust fixed point info for blocks
+  ratel_log('adjusting fixed point info\n', [fname]);
+  [ko, blklst] = adjust_fp(blklst, connectmat)
+  if ~ko then
+    ratel_log('error adjusting fixed point info\n', [fname, 'error']);
+    return;
+  end
+
+  //update graphical diagram from flattened block list so that all
+  //info is in one place
+  ratel_log('adjusting models\n', [fname]);
+  [ko, adjusted_diagram] = adjust_models(blklst, cor, diagram, list());
+  if ~ko,
+    msg = msprintf('error adjusting diagram models from blklst');
+    ratel_log(msg, [fname+'\n', 'error']);
+    return;
+  end  
+
+  ok = %t;
+endfunction //adjust_diagram
+
+//taken from c_pass2
 //adjust_inout : it resolves positive, negative and null size
 //               of in/out port dimensions of connected block.
 //               If it's not done in a first pass, the second 
@@ -39,7 +98,7 @@
 //
 //10/05/07, Alan : - if-then-else event-select case
 
-function [ok,bllst]=ratel_adjust_inout(bllst,connectmat)
+function [ok,bllst]=adjust_inout(bllst,connectmat)
 
   //Adjust in2/out2, inttyp/outtyp
   //in accordance to in/out in bllst
@@ -531,4 +590,326 @@ function [ok,bllst]=ratel_adjust_inout(bllst,connectmat)
         ok=%f;return;
      end
   end
-endfunction
+endfunction //adjust_inout
+
+//taken directly from c_pass2.sci
+// adjust_typ: It resolves positives and negatives port types.
+//		   Its Algorithm is based on the algorithm of adjust_inout
+// Fady NASSIF: 14/06/2007
+
+function [ok,bllst]=adjust_typ(bllst,connectmat)
+
+for i=1:length(bllst)
+  if size(bllst(i).in,1)<>size(bllst(i).intyp,2) then
+    bllst(i).intyp=bllst(i).intyp(1)*ones(size(bllst(i).in,1),1);
+  end
+  if size(bllst(i).out,1)<>size(bllst(i).outtyp,2) then
+    bllst(i).outtyp=bllst(i).outtyp(1)*ones(size(bllst(i).out,1),1);
+  end
+end
+nlnk=size(connectmat,1) 
+for hhjj=1:length(bllst)+1
+  for hh=1:length(bllst)+1 
+    ok=%t
+    for jj=1:nlnk 
+      nnout(1,1)=bllst(connectmat(jj,1)).out(connectmat(jj,2))
+      nnout(1,2)=bllst(connectmat(jj,1)).out2(connectmat(jj,2))
+      nnin(1,1)=bllst(connectmat(jj,3)).in(connectmat(jj,4))
+      nnin(1,2)=bllst(connectmat(jj,3)).in2(connectmat(jj,4))
+      outtyp = bllst(connectmat(jj,1)).outtyp(connectmat(jj,2))
+      intyp = bllst(connectmat(jj,3)).intyp(connectmat(jj,4))
+      
+      //first case : types of source and
+      //             target ports are explicitly informed
+      //             with positive types
+      if (intyp>0 & outtyp>0) then
+	//if types of source and target port doesn't match and aren't double and complex
+	//then call bad_connection, set flag ok to false and exit
+	
+	if intyp<>outtyp then
+	  if (intyp==1 & outtyp==2) then
+	    bllst(connectmat(jj,3)).intyp(connectmat(jj,4))=2;
+	  elseif (intyp==2 & outtyp==1) then
+	    bllst(connectmat(jj,1)).outtyp(connectmat(jj,2))=2;
+	  else
+	    bad_connection(corinv(connectmat(jj,1)),connectmat(jj,2),..
+		nnout,outtyp,..
+		corinv(connectmat(jj,3)),connectmat(jj,4),..
+		nnin,intyp,1)
+	    ok=%f;
+	    return
+	  end
+	end
+	
+	//second case : type of source port is
+	//              positive and type of
+	//              target port is negative
+      elseif(outtyp>0&intyp<0) then
+	//find vector of input ports of target block with
+	//type equal to intyp
+	//and assign it to outtyp
+	ww=find(bllst(connectmat(jj,3)).intyp==intyp)
+	bllst(connectmat(jj,3)).intyp(ww)=outtyp
+	
+	//find vector of output ports of target block with
+	//type equal to intyp
+	//and assign it to outtyp
+	ww=find(bllst(connectmat(jj,3)).outtyp==intyp)
+	bllst(connectmat(jj,3)).outtyp(ww)=outtyp
+	
+	//third case : type of source port is
+	//             negative and type of
+	//             target port is positive
+      elseif(outtyp<0&intyp>0) then
+	//find vector of output ports of source block with
+	//type equal to outtyp
+	//and assign it to intyp
+	ww=find(bllst(connectmat(jj,1)).outtyp==outtyp)
+	bllst(connectmat(jj,1)).outtyp(ww)=intyp
+	
+	//find vector of input ports of source block with
+	//type equal to size outtyp
+	//and assign it to intyp
+	ww=find(bllst(connectmat(jj,1)).intyp==outtyp)
+	bllst(connectmat(jj,1)).intyp(ww)=intyp
+	
+	
+	//fourth (& last) case : type of both source 
+	//                      and target port are negatives
+      else
+	ok=%f //set flag ok to false
+      end
+    end
+    if ok then return, end //if ok is set true then exit adjust_typ
+  end
+  //if failed then display message
+  messagebox(msprintf(_('Not enough information to find port type.\n'+..
+			'I will try to find the problem.')),"modal","info");
+  findflag=%f 
+  for jj=1:nlnk 
+    nouttyp=bllst(connectmat(jj,1)).outtyp(connectmat(jj,2))
+    nintyp=bllst(connectmat(jj,3)).intyp(connectmat(jj,4))
+    
+    //loop on the two dimensions of source/target port
+    //only case : target and source ports are both
+    //            negatives or null
+    if nouttyp<=0 & nintyp<=0 then
+      findflag=%t;
+      //
+      inouttyp=under_connection(corinv(connectmat(jj,1)),connectmat(jj,2),nouttyp,..
+	  corinv(connectmat(jj,3)),connectmat(jj,4),nintyp,2)			   
+      //
+      if inouttyp<1|inouttyp>8 then ok=%f;return;end
+      //
+      ww=find(bllst(connectmat(jj,1)).outtyp==nouttyp)
+      bllst(connectmat(jj,1)).outtyp(ww)=inouttyp
+      
+      //
+      ww=find(bllst(connectmat(jj,1)).intyp==nouttyp)
+      bllst(connectmat(jj,1)).intyp(ww)=inouttyp
+      
+      ww=find(bllst(connectmat(jj,3)).intyp==nintyp)
+      bllst(connectmat(jj,3)).intyp(ww)=inouttyp
+      //
+      ww=find(bllst(connectmat(jj,3)).outtyp==nintyp)
+      bllst(connectmat(jj,3)).outtyp(ww)=inouttyp
+      
+      //
+    end
+  end
+  //if failed then display message
+  if ~findflag then 
+    messagebox(msprintf(_('I cannot find a link with undetermined size.\n'+..
+			  'My guess is that you have a block with unconnected \n'+..
+			  'undetermined types.')),"modal","error");
+    ok=%f;return;
+  end
+end
+endfunction //adjust_typ
+
+function[ok, bllst] = adjust_fp(bllst, connectmat)
+//adjust_fp: Resolves fp info.
+//  based on adjust_inout algorithm
+//  Andrew: 05/12/2014
+
+  ok = %f;
+  fname = 'adjust_fp';
+
+  nlnk=size(connectmat,1); //nlnk is the number of link
+
+  //loop on number of block (pass 1 and pass 2)
+  for hhjj=1:length(bllst)+1
+    //%%%%% pass 1 %%%%%//
+    for hh=1:length(bllst)+1 //second loop on number of block
+      ok=%T
+      for jj=1:nlnk //loop on number of link
+        outblk = bllst(connectmat(jj,1)); 
+        inblk = bllst(connectmat(jj,3));
+        //we only care about links where source and destination
+        //blocks use fixed point
+        outbt = outblk.blocktype; inbt = inblk.blocktype;
+        if (strcmp(outbt, 'f') == 0) & (strcmp(inbt, 'f') == 0) then
+          msg = msprintf('processing fixed point link between %d and %d', connectmat(jj,1), connectmat(jj,3));  
+          ratel_log(msg+'\n', [fname]);
+          //in/outinfo are parameter structs for blocks
+          //containing fixed point info for ports
+          outinfo = outblk.opar(1).out; ininfo = inblk.opar(1).in;
+  
+          oport_idx = connectmat(jj,2); iport_idx = connectmat(jj,4);
+
+          //try to get other info.
+          //if other info not available, ask block to try calculate it.
+          //if still no luck, then mark as negative for this run
+
+          outsign = -1; outnbits = -1; outbinpt = -1;
+          if (length(outinfo.sign) >= oport_idx) then 
+            outsign = outinfo.sign(oport_idx); 
+          end
+          if (length(outinfo.nbits) >= oport_idx) then 
+            outnbits = outinfo.nbits(oport_idx); 
+          end
+          if (length(outinfo.binpt) >= oport_idx) then  
+            outbinpt = outinfo.binpt(oport_idx);
+          end
+          
+          insign = -1; innbits = -1; inbinpt = -1;
+          if (length(ininfo.sign) >= iport_idx) then 
+            insign = ininfo.sign(iport_idx); 
+          end
+          if (length(outinfo.nbits) >= iport_idx) then 
+            innbits = ininfo.nbits(iport_idx); 
+          end
+          if (length(outinfo.binpt) >= iport_idx) then  
+            inbinpt = ininfo.binpt(iport_idx);
+          end
+
+	  ratel_log('before:\n', [fname]);
+          msg = msprintf('out: sign(%d) (%d,%d)', outsign, outnbits, outbinpt);   
+          ratel_log(msg+'\n', [fname]);
+          msg = msprintf('in: sign(%d) (%d,%d)', insign, innbits, inbinpt);   
+          ratel_log(msg+'\n', [fname]);
+
+          //if outsign < 0 | outnbits < 0 | outbinpt < 0 then
+          //  outcalc = outinfo.outcalc;  //function to calculate out info
+          //  fn_call_str = msprintf('[x] = %s(''adjust'', outblk)', outcalc); 
+          //  execstr(fn_call_str);
+          //  //TODO how to check for errors? 
+          //end
+          //bllst(connectmat(jj,1)) = x;
+          //outinfo = x.opar(1).out;
+          //outsign = -1; outnbits = -1; outbinpt = -1;
+          //outsign = outinfo.sign(outport);
+          //outnbits = outinfo.nbits(outport);
+          //outbinpt = outinfo.binpt(outport);
+         
+          //if both src and dest are positive but different
+          if (insign >= 0) & (outsign >= 0) & (outsign <> insign) then 
+            ok = %F;
+            ratel_log('sign mismatch\n', [fname, 'error']);
+            return;
+          elseif insign < 0 & outsign >= 0 then 
+            ininfo.sign(iport_idx) = outsign;
+          else
+            ok = %F;
+          end
+          
+          //if both src and dest are positive but different
+          if (innbits >= 0) & (outnbits >= 0) & (outnbits <> innbits) then 
+            ok = %F;
+            ratel_log('number bits mismatch\n', [fname, 'error']);
+            return;
+          elseif innbits < 0 & outnbits >= 0 then 
+            ininfo.nbits(iport_idx) = outnbits;
+          else
+            ok = %F;
+          end
+          
+          //if both src and dest are positive but different
+          if (inbinpt >= 0) & (outbinpt >= 0) & (outbinpt <> inbinpt) then 
+            ok = %F;
+            ratel_log('binary point mismatch\n', [fname, 'error']);
+            return;
+          elseif inbinpt < 0 & outbinpt >= 0 then 
+            ininfo.binpt(iport_idx) = outbinpt;
+          else
+            ok = %F;
+          end
+	  
+          insign = ininfo.sign(iport_idx); 
+          innbits = ininfo.nbits(iport_idx); 
+          inbinpt = ininfo.binpt(iport_idx);
+	  ratel_log('after:\n', [fname]);
+          msg = msprintf('in: sign(%d) (%d,%d)', insign, innbits, inbinpt);   
+          ratel_log(msg+'\n', [fname]);
+
+          inblk.opar(1).in = ininfo;
+          bllst(connectmat(jj,3)) = inblk;  
+
+        end //if blocktype
+      end //link loop
+      if ok then return, end //if ok is still set then gone through all links so return 
+    end //second loop
+  end  //outer loop
+  ok = %t;
+endfunction //adjust_fp
+
+function [ok, adjusted_diagram] = adjust_models(blklst, cor, diagram, offset)
+//adjust models in diagram from blklst using cor starting at offset
+  ok = %f; adjusted_diagram = diagram;
+  fname = 'adjust_models';
+ 
+  if typeof(diagram) ~= 'diagram',
+    ratel_log(msprintf('%s passed instead of diagram', typeof(diagram))+'\n', [fname, 'error']);
+    return;
+  end
+
+  diagname = diagram.props.title;
+
+  //iterate through diagram
+  for obj_index = 1:length(diagram.objs),
+    obj = diagram.objs(obj_index);
+
+    if typeof(obj) == 'Block' then
+      updated_obj = obj;  
+      blk_type = obj.gui;
+
+      //if we have a superblock we update the models in it  
+      if blk_type == 'SUPER_f' then
+        msg = msprintf('updating models in superblock found at %d', obj_index);
+        ratel_log(msg+'\n', [fname]);
+        //update superblock
+        [ko, updated_obj] = adjust_models(blklst, cor, obj.model.rpar, list(offset(:), obj_index));
+        if ~ko then
+          msg = msprintf('error updating models in superblock found at %d', obj_index);
+          ratel_log(msg+'\n', [fname, 'error']);
+        end //if
+      //otherwise we have a normal block to be updated from blklst
+      else, 
+        location = cor(list(offset(:), obj_index));
+      
+        //cor contains a 0 for the location if the block has been excluded during c_pass1
+        if location(1) ~= 0 then
+          loc_str = '';
+          for loci = 1:length(location),
+            if loci ~= 1 then loc_str = loc_str+','; end //if
+            loc_str = loc_str+msprintf('%d',location(loci));
+          end //for
+          msg = msprintf('found %s ''%s'' at location [%s]', blk_type, obj.graphics.exprs(1), loc_str);
+          ratel_log(msg+'\n', [fname]);
+        
+          //update model 
+          obj.model = blklst(location);
+          updated_obj = obj;
+        else,
+          ratel_log(msprintf('%s %s excluded from update', blk_type, obj.graphics.exprs(1))+'\n', [fname, 'warning']);
+        end //if location
+      end //if super_block
+
+      //update diagram with updated object 
+      adjusted_diagram.objs(obj_index) = updated_obj;
+    end // if Block
+  end //for
+    
+  ok = %t;
+endfunction //adjust_models
+
