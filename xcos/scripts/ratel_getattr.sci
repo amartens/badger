@@ -8,25 +8,26 @@ function[value, ok] = ratel_getattr(object, attribute)
     object = object.model;
   elseif typeof(object) == 'model' then
   else
-    ratel_log(msprintf('unrecognised object type %s', typeof(object))+'\n',[fname, 'error']); 
+    msg = msprintf('unrecognised object type %s, expecting ''Block'' or ''model''', typeof(object))
+    ratel_log(msg+'\n',[fname, 'error']); 
     return;
   end //if
 
   select attribute
-    case 'in_sign' then
+    case 'sign_in' then
       value = object.opar(1).in.sign;
-    case 'in_n_bits' then
+    case 'n_bits_in' then
       value = object.opar(1).in.n_bits;
-    case 'in_bin_pt' then
+    case 'bin_pt_in' then
       value = object.opar(1).in.bin_pt;
-    case 'out_sign' then
+    case 'sign_out' then
       value = object.opar(1).out.sign;
-    case 'out_n_bits' then
+    case 'n_bits_out' then
       value = object.opar(1).out.n_bits;
-    case 'out_bin_pt' then
+    case 'bin_pt_out' then
       value = object.opar(1).out.bin_pt;
     else
-      ratel_log(msprintf('unrecognised attribute %s', attribute)+'\n',[fname, 'error']); 
+      ratel_log(msprintf('unknown attribute %s requested', attribute)+'\n',[fname, 'error']); 
       return;
   end //select
 
