@@ -1,4 +1,4 @@
-function [ok, adjusted_diagram] = adjust_diagram(diagram)
+function [adjusted_diagram, ok] = adjust_diagram(diagram)
 //various diagram sanity checks, determines port types etc
 //returns updated diagram
   
@@ -11,9 +11,18 @@ function [ok, adjusted_diagram] = adjust_diagram(diagram)
     return;
   end
 
+  //add blocks to be used during port creation
+  ratel_log(msprintf('adding port creation helper blocks to %s',diagram.props.title)+'\n', [fname]);
+  [diagram_with_helpers, ko] = add_port_helpers(diagram);
+  if ~ko,
+    msg = msprintf('error adding port creation helper blocks to diagram %s',diagram.props.title);
+    ratel_log(msg+'\n', [fname, 'error']);
+    return;
+  end 
+ 
   //we run c_pass1 to do certain connectivity checks and 'flatten' structure
   ratel_log(msprintf('running c_pass1 on %s', diagram.props.title)+'\n', [fname]);
-  [blklst, connectmat, ccmat, cor, corinv, ko]=c_pass1(diagram);  
+  [blklst, connectmat, ccmat, cor, corinv, ko]=c_pass1(diagram_with_helpers);  
   if ~ko then
     ratel_log('error in first pass\n', [fname, 'error']);
     return;
@@ -46,15 +55,111 @@ function [ok, adjusted_diagram] = adjust_diagram(diagram)
   //update graphical diagram from flattened block list so that all
   //info is in one place
   ratel_log('adjusting models\n', [fname]);
-  [ko, adjusted_diagram] = adjust_models(blklst, cor, diagram, list());
+  [ko, adjusted_diagram] = adjust_models(blklst, cor, diagram_with_helpers, list());
   if ~ko,
     msg = msprintf('error adjusting diagram models from blklst');
-    ratel_log(msg, [fname+'\n', 'error']);
+    ratel_log(msg+'\n', [fname, 'error']);
     return;
   end  
-
+  
   ok = %t;
 endfunction //adjust_diagram
+
+function[diagram_with_helpers, ok] = add_port_helpers(diagram)
+//adds blocks after input ports and before output ports that will not
+//be removed during c_pass1 that will help when generating verilog
+  diagram_with_helpers = diagram; ok = %f;
+  fname = 'add_port_helpers';
+  in_blocks=["IN_f","INIMPL_f","CLKIN_f","CLKINV_f"]
+  out_blocks=["OUT_f","OUTIMPL_f","CLKOUT_f","CLKOUTV_f"]
+  
+  if strcmp(typeof(diagram), 'diagram'),
+    ratel_log(msprintf('%s passed instead of diagram', typeof(diagram))+'\n', [fname, 'error']);
+    return;
+  end
+  
+  for obj_i = 1:length(diagram.objs),
+    obj = diagram.objs(obj_i);
+    n_objs = length(diagram_with_helpers.objs)
+
+    if typeof(obj) == 'Block' then
+      //process input port blocks
+      if or(obj.gui==in_blocks) then
+        msg = msprintf('processing %s(%d)', obj.gui, obj.model.ipar);
+        ratel_log(msg+'\n', [fname]);
+
+        //new link between input port and helper
+        lnk = scicos_link()
+        lnk.id = 'helper'
+        lnk.from = [obj_i, 1, 0]
+        lnk.to = [n_objs+1, 1, 1] 
+
+        //construct input helper block
+        io = inout('define', 1)
+        pout = obj.graphics.pout    
+
+        //link helper to input port's links
+        io.graphics.pout = pout       
+        //link helper to new link to input port
+        io.graphics.pin = n_objs+2
+        //change input port's link
+        obj.graphics.pout = n_objs+2
+
+        //insert new object, new link, and updated object
+        diagram_with_helpers.objs(n_objs+1) = io
+        diagram_with_helpers.objs(n_objs+2) = lnk
+        diagram_with_helpers.objs(obj_i) = obj
+    
+        //lastly update existing links to point to helper as source
+        diagram_with_helpers.objs(pout).from = [n_objs+1, 1, 0]
+
+      elseif or(obj.gui==out_blocks) then
+        msg = msprintf('processing %s(%d)', obj.gui, obj.model.ipar);
+        ratel_log(msg+'\n', [fname]);
+
+        //new link between helper and output port
+        lnk = scicos_link()
+        lnk.id = 'helper'
+        lnk.from = [n_objs+1, 1, 0]
+        lnk.to = [obj_i, 1, 1] 
+
+        //construct output helper block
+        io = inout('define', 0)
+        pin = obj.graphics.pin
+        //link helper to link into output port
+        io.graphics.pin = pin       
+        //link helper to new link to output port
+        io.graphics.pout = n_objs+2
+
+        obj.graphics.pin = n_objs+2
+
+        //insert new object, new link, and updated object
+        diagram_with_helpers.objs(n_objs+1) = io
+        diagram_with_helpers.objs(n_objs+2) = lnk
+        diagram_with_helpers.objs(obj_i) = obj
+    
+        //lastly update existing links to point to helper as destination
+        diagram_with_helpers.objs(pin).to = [n_objs+1, 1, 1]
+
+      elseif obj.model.sim=="super"|obj.model.sim=="csuper" then
+        msg = msprintf('adding port helpers to superblock at offset %d', obj_i);
+        ratel_log(msg+'\n', [fname]);
+        
+        //update superblock
+        [updated_super, ko] = add_port_helpers(obj.model.rpar);
+        if ~ko then
+          msg = msprintf('error adding port helpers in superblock found at %d', obj_i);
+          ratel_log(msg+'\n', [fname, 'error']);
+        end //if
+      
+        //update diagram with updated super block
+        diagram_with_helpers.objs(obj_i).model.rpar = updated_super;
+      end //if super
+    end //if Block
+  end //for
+
+  ok = %t;
+endfunction //add_port_helpers
 
 //taken from c_pass2
 //adjust_inout : it resolves positive, negative and null size
@@ -599,132 +704,132 @@ endfunction //adjust_inout
 
 function [ok,bllst]=adjust_typ(bllst,connectmat)
 
-for i=1:length(bllst)
-  if size(bllst(i).in,1)<>size(bllst(i).intyp,2) then
-    bllst(i).intyp=bllst(i).intyp(1)*ones(size(bllst(i).in,1),1);
+  for i=1:length(bllst)
+    if size(bllst(i).in,1)<>size(bllst(i).intyp,2) then
+      bllst(i).intyp=bllst(i).intyp(1)*ones(size(bllst(i).in,1),1);
+    end
+    if size(bllst(i).out,1)<>size(bllst(i).outtyp,2) then
+      bllst(i).outtyp=bllst(i).outtyp(1)*ones(size(bllst(i).out,1),1);
+    end
   end
-  if size(bllst(i).out,1)<>size(bllst(i).outtyp,2) then
-    bllst(i).outtyp=bllst(i).outtyp(1)*ones(size(bllst(i).out,1),1);
-  end
-end
-nlnk=size(connectmat,1) 
-for hhjj=1:length(bllst)+1
-  for hh=1:length(bllst)+1 
-    ok=%t
-    for jj=1:nlnk 
-      nnout(1,1)=bllst(connectmat(jj,1)).out(connectmat(jj,2))
-      nnout(1,2)=bllst(connectmat(jj,1)).out2(connectmat(jj,2))
-      nnin(1,1)=bllst(connectmat(jj,3)).in(connectmat(jj,4))
-      nnin(1,2)=bllst(connectmat(jj,3)).in2(connectmat(jj,4))
-      outtyp = bllst(connectmat(jj,1)).outtyp(connectmat(jj,2))
-      intyp = bllst(connectmat(jj,3)).intyp(connectmat(jj,4))
-      
-      //first case : types of source and
-      //             target ports are explicitly informed
-      //             with positive types
-      if (intyp>0 & outtyp>0) then
-	//if types of source and target port doesn't match and aren't double and complex
-	//then call bad_connection, set flag ok to false and exit
-	
-	if intyp<>outtyp then
-	  if (intyp==1 & outtyp==2) then
-	    bllst(connectmat(jj,3)).intyp(connectmat(jj,4))=2;
-	  elseif (intyp==2 & outtyp==1) then
-	    bllst(connectmat(jj,1)).outtyp(connectmat(jj,2))=2;
-	  else
-	    bad_connection(corinv(connectmat(jj,1)),connectmat(jj,2),..
-		nnout,outtyp,..
-		corinv(connectmat(jj,3)),connectmat(jj,4),..
-		nnin,intyp,1)
-	    ok=%f;
-	    return
-	  end
-	end
-	
-	//second case : type of source port is
-	//              positive and type of
-	//              target port is negative
-      elseif(outtyp>0&intyp<0) then
-	//find vector of input ports of target block with
-	//type equal to intyp
-	//and assign it to outtyp
-	ww=find(bllst(connectmat(jj,3)).intyp==intyp)
-	bllst(connectmat(jj,3)).intyp(ww)=outtyp
-	
-	//find vector of output ports of target block with
-	//type equal to intyp
-	//and assign it to outtyp
-	ww=find(bllst(connectmat(jj,3)).outtyp==intyp)
-	bllst(connectmat(jj,3)).outtyp(ww)=outtyp
-	
-	//third case : type of source port is
-	//             negative and type of
-	//             target port is positive
-      elseif(outtyp<0&intyp>0) then
-	//find vector of output ports of source block with
-	//type equal to outtyp
-	//and assign it to intyp
-	ww=find(bllst(connectmat(jj,1)).outtyp==outtyp)
-	bllst(connectmat(jj,1)).outtyp(ww)=intyp
-	
-	//find vector of input ports of source block with
-	//type equal to size outtyp
-	//and assign it to intyp
-	ww=find(bllst(connectmat(jj,1)).intyp==outtyp)
-	bllst(connectmat(jj,1)).intyp(ww)=intyp
-	
-	
-	//fourth (& last) case : type of both source 
-	//                      and target port are negatives
+  nlnk=size(connectmat,1) 
+  for hhjj=1:length(bllst)+1
+    for hh=1:length(bllst)+1 
+      ok=%t
+      for jj=1:nlnk 
+        nnout(1,1)=bllst(connectmat(jj,1)).out(connectmat(jj,2))
+        nnout(1,2)=bllst(connectmat(jj,1)).out2(connectmat(jj,2))
+        nnin(1,1)=bllst(connectmat(jj,3)).in(connectmat(jj,4))
+        nnin(1,2)=bllst(connectmat(jj,3)).in2(connectmat(jj,4))
+        outtyp = bllst(connectmat(jj,1)).outtyp(connectmat(jj,2))
+        intyp = bllst(connectmat(jj,3)).intyp(connectmat(jj,4))
+        
+        //first case : types of source and
+        //             target ports are explicitly informed
+        //             with positive types
+        if (intyp>0 & outtyp>0) then
+    //if types of source and target port doesn't match and aren't double and complex
+    //then call bad_connection, set flag ok to false and exit
+    
+    if intyp<>outtyp then
+      if (intyp==1 & outtyp==2) then
+        bllst(connectmat(jj,3)).intyp(connectmat(jj,4))=2;
+      elseif (intyp==2 & outtyp==1) then
+        bllst(connectmat(jj,1)).outtyp(connectmat(jj,2))=2;
       else
-	ok=%f //set flag ok to false
+        bad_connection(corinv(connectmat(jj,1)),connectmat(jj,2),..
+      nnout,outtyp,..
+      corinv(connectmat(jj,3)),connectmat(jj,4),..
+      nnin,intyp,1)
+        ok=%f;
+        return
       end
     end
-    if ok then return, end //if ok is set true then exit adjust_typ
-  end
-  //if failed then display message
-  messagebox(msprintf(_('Not enough information to find port type.\n'+..
-			'I will try to find the problem.')),"modal","info");
-  findflag=%f 
-  for jj=1:nlnk 
-    nouttyp=bllst(connectmat(jj,1)).outtyp(connectmat(jj,2))
-    nintyp=bllst(connectmat(jj,3)).intyp(connectmat(jj,4))
     
-    //loop on the two dimensions of source/target port
-    //only case : target and source ports are both
-    //            negatives or null
-    if nouttyp<=0 & nintyp<=0 then
-      findflag=%t;
-      //
-      inouttyp=under_connection(corinv(connectmat(jj,1)),connectmat(jj,2),nouttyp,..
-	  corinv(connectmat(jj,3)),connectmat(jj,4),nintyp,2)			   
-      //
-      if inouttyp<1|inouttyp>8 then ok=%f;return;end
-      //
-      ww=find(bllst(connectmat(jj,1)).outtyp==nouttyp)
-      bllst(connectmat(jj,1)).outtyp(ww)=inouttyp
+    //second case : type of source port is
+    //              positive and type of
+    //              target port is negative
+        elseif(outtyp>0&intyp<0) then
+    //find vector of input ports of target block with
+    //type equal to intyp
+    //and assign it to outtyp
+    ww=find(bllst(connectmat(jj,3)).intyp==intyp)
+    bllst(connectmat(jj,3)).intyp(ww)=outtyp
+    
+    //find vector of output ports of target block with
+    //type equal to intyp
+    //and assign it to outtyp
+    ww=find(bllst(connectmat(jj,3)).outtyp==intyp)
+    bllst(connectmat(jj,3)).outtyp(ww)=outtyp
+    
+    //third case : type of source port is
+    //             negative and type of
+    //             target port is positive
+        elseif(outtyp<0&intyp>0) then
+    //find vector of output ports of source block with
+    //type equal to outtyp
+    //and assign it to intyp
+    ww=find(bllst(connectmat(jj,1)).outtyp==outtyp)
+    bllst(connectmat(jj,1)).outtyp(ww)=intyp
+    
+    //find vector of input ports of source block with
+    //type equal to size outtyp
+    //and assign it to intyp
+    ww=find(bllst(connectmat(jj,1)).intyp==outtyp)
+    bllst(connectmat(jj,1)).intyp(ww)=intyp
+    
+    
+    //fourth (& last) case : type of both source 
+    //                      and target port are negatives
+        else
+    ok=%f //set flag ok to false
+        end
+      end
+      if ok then return, end //if ok is set true then exit adjust_typ
+    end
+    //if failed then display message
+    messagebox(msprintf(_('Not enough information to find port type.\n'+..
+        'I will try to find the problem.')),"modal","info");
+    findflag=%f 
+    for jj=1:nlnk 
+      nouttyp=bllst(connectmat(jj,1)).outtyp(connectmat(jj,2))
+      nintyp=bllst(connectmat(jj,3)).intyp(connectmat(jj,4))
       
-      //
-      ww=find(bllst(connectmat(jj,1)).intyp==nouttyp)
-      bllst(connectmat(jj,1)).intyp(ww)=inouttyp
-      
-      ww=find(bllst(connectmat(jj,3)).intyp==nintyp)
-      bllst(connectmat(jj,3)).intyp(ww)=inouttyp
-      //
-      ww=find(bllst(connectmat(jj,3)).outtyp==nintyp)
-      bllst(connectmat(jj,3)).outtyp(ww)=inouttyp
-      
-      //
+      //loop on the two dimensions of source/target port
+      //only case : target and source ports are both
+      //            negatives or null
+      if nouttyp<=0 & nintyp<=0 then
+        findflag=%t;
+        //
+        inouttyp=under_connection(corinv(connectmat(jj,1)),connectmat(jj,2),nouttyp,..
+      corinv(connectmat(jj,3)),connectmat(jj,4),nintyp,2)			   
+        //
+        if inouttyp<1|inouttyp>8 then ok=%f;return;end
+        //
+        ww=find(bllst(connectmat(jj,1)).outtyp==nouttyp)
+        bllst(connectmat(jj,1)).outtyp(ww)=inouttyp
+        
+        //
+        ww=find(bllst(connectmat(jj,1)).intyp==nouttyp)
+        bllst(connectmat(jj,1)).intyp(ww)=inouttyp
+        
+        ww=find(bllst(connectmat(jj,3)).intyp==nintyp)
+        bllst(connectmat(jj,3)).intyp(ww)=inouttyp
+        //
+        ww=find(bllst(connectmat(jj,3)).outtyp==nintyp)
+        bllst(connectmat(jj,3)).outtyp(ww)=inouttyp
+        
+        //
+      end
+    end
+    //if failed then display message
+    if ~findflag then 
+      messagebox(msprintf(_('I cannot find a link with undetermined size.\n'+..
+          'My guess is that you have a block with unconnected \n'+..
+          'undetermined types.')),"modal","error");
+      ok=%f;return;
     end
   end
-  //if failed then display message
-  if ~findflag then 
-    messagebox(msprintf(_('I cannot find a link with undetermined size.\n'+..
-			  'My guess is that you have a block with unconnected \n'+..
-			  'undetermined types.')),"modal","error");
-    ok=%f;return;
-  end
-end
 endfunction //adjust_typ
 
 function[ok, bllst] = adjust_fp(bllst, connectmat)
@@ -741,54 +846,57 @@ function[ok, bllst] = adjust_fp(bllst, connectmat)
   for hhjj=1:length(bllst)+1
     //%%%%% pass 1 %%%%%//
     for hh=1:length(bllst)+1 //second loop on number of block
-      ok=%T
+      done=%t
       for jj=1:nlnk //loop on number of link
-        outblk = bllst(connectmat(jj,1)); 
-        inblk = bllst(connectmat(jj,3));
+        srcblk = bllst(connectmat(jj,1)); 
+        tgtblk = bllst(connectmat(jj,3));
         //we only care about links where source and destination
         //blocks use fixed point
-        outbt = outblk.blocktype; inbt = inblk.blocktype;
-        if (strcmp(outbt, 'f') == 0) & (strcmp(inbt, 'f') == 0) then
+        src_obt = srcblk.blocktype; tgt_ibt = tgtblk.blocktype;
+        if (strcmp(src_obt, 'f') == 0) & (strcmp(tgt_ibt, 'f') == 0) then
           msg = msprintf('processing fixed point link between %d and %d', connectmat(jj,1), connectmat(jj,3));  
           ratel_log(msg+'\n', [fname]);
           //in/outinfo are parameter structs for blocks
           //containing fixed point info for ports
-          outinfo = outblk.opar(1).out; ininfo = inblk.opar(1).in;
-  
-          oport_idx = connectmat(jj,2); iport_idx = connectmat(jj,4);
+          src_oinfo = srcblk.opar(1).out; tgt_iinfo = tgtblk.opar(1).in;
+          tgt_oinfo = tgtblk.opar(1).out;
+
+          srcport_idx = connectmat(jj,2); tgtport_idx = connectmat(jj,4);
 
           //try to get other info.
           //if other info not available, ask block to try calculate it.
           //if still no luck, then mark as negative for this run
 
-          outsign = -1; outnbits = -1; outbinpt = -1;
-          if (length(outinfo.sign) >= oport_idx) then 
-            outsign = outinfo.sign(oport_idx); 
+          srcsign = -1; srcnbits = -1; srcbinpt = -1;
+          if (length(src_oinfo.sign) >= srcport_idx) then 
+            srcsign = src_oinfo.sign(srcport_idx); 
           end
-          if (length(outinfo.nbits) >= oport_idx) then 
-            outnbits = outinfo.nbits(oport_idx); 
+          if (length(src_oinfo.nbits) >= srcport_idx) then 
+            srcnbits = src_oinfo.nbits(srcport_idx); 
           end
-          if (length(outinfo.binpt) >= oport_idx) then  
-            outbinpt = outinfo.binpt(oport_idx);
+          if (length(src_oinfo.binpt) >= srcport_idx) then  
+            srcbinpt = src_oinfo.binpt(srcport_idx);
           end
           
-          insign = -1; innbits = -1; inbinpt = -1;
-          if (length(ininfo.sign) >= iport_idx) then 
-            insign = ininfo.sign(iport_idx); 
+          tgtsign = -1; tgtnbits = -1; tgtbinpt = -1;
+          if (length(tgt_iinfo.sign) >= tgtport_idx) then 
+            tgtsign = tgt_iinfo.sign(tgtport_idx); 
           end
-          if (length(outinfo.nbits) >= iport_idx) then 
-            innbits = ininfo.nbits(iport_idx); 
+          if (length(tgt_iinfo.nbits) >= tgtport_idx) then 
+            tgtnbits = tgt_iinfo.nbits(tgtport_idx); 
           end
-          if (length(outinfo.binpt) >= iport_idx) then  
-            inbinpt = ininfo.binpt(iport_idx);
+          if (length(tgt_iinfo.binpt) >= tgtport_idx) then  
+            tgtbinpt = tgt_iinfo.binpt(tgtport_idx);
           end
 
-	  ratel_log('before:\n', [fname]);
-          msg = msprintf('out: sign(%d) (%d,%d)', outsign, outnbits, outbinpt);   
+	        ratel_log('before:\n', [fname]);
+          msg = msprintf('source: sign(%d) (%d,%d)', srcsign, srcnbits, srcbinpt);   
           ratel_log(msg+'\n', [fname]);
-          msg = msprintf('in: sign(%d) (%d,%d)', insign, innbits, inbinpt);   
+          msg = msprintf('target: sign(%d) (%d,%d)', tgtsign, tgtnbits, tgtbinpt);   
           ratel_log(msg+'\n', [fname]);
 
+          //TODO
+          //ask block to determine its own output settings
           //if outsign < 0 | outnbits < 0 | outbinpt < 0 then
           //  outcalc = outinfo.outcalc;  //function to calculate out info
           //  fn_call_str = msprintf('[x] = %s(''adjust'', outblk)', outcalc); 
@@ -803,54 +911,76 @@ function[ok, bllst] = adjust_fp(bllst, connectmat)
           //outbinpt = outinfo.binpt(outport);
          
           //if both src and dest are positive but different
-          if (insign >= 0) & (outsign >= 0) & (outsign <> insign) then 
-            ok = %F;
-            ratel_log('sign mismatch\n', [fname, 'error']);
-            return;
-          elseif insign < 0 & outsign >= 0 then 
-            ininfo.sign(iport_idx) = outsign;
+          if (tgtsign >= 0) & (srcsign >= 0) then 
+            if (srcsign <> tgtsign) then 
+              ratel_log('sign mismatch\n', [fname, 'error']);
+              return;
+            end //if
+          //if src has a sign but target doesn't
+          elseif tgtsign < 0 & srcsign >= 0 then 
+            //update target port with sign
+            tgt_iinfo.sign(tgtport_idx) = srcsign;
+	          //find vector of output ports of target block with
+	          //sign equal to tgtsign and assign it to srcsign
+	          ww=find(tgt_oinfo.sign==tgtsign)
+	          tgt_oinfo.sign(ww)=srcsign
           else
-            ok = %F;
+            done = %f;
           end
           
           //if both src and dest are positive but different
-          if (innbits >= 0) & (outnbits >= 0) & (outnbits <> innbits) then 
-            ok = %F;
-            ratel_log('number bits mismatch\n', [fname, 'error']);
-            return;
-          elseif innbits < 0 & outnbits >= 0 then 
-            ininfo.nbits(iport_idx) = outnbits;
+          if (srcnbits >= 0) & (tgtnbits >= 0) then
+            if (srcnbits <> tgtnbits) then 
+              ratel_log('number bits mismatch\n', [fname, 'error']);
+              return;
+            end //if
+          elseif tgtnbits < 0 & srcnbits >= 0 then 
+            tgt_iinfo.nbits(tgtport_idx) = srcnbits;
+	          //find vector of output ports of target block with
+	          //nbits equal to tgtnbits and assign it to srcnbits
+	          ww=find(tgt_oinfo.nbits==tgtnbits)
+	          tgt_oinfo.nbits(ww)=srcnbits
           else
-            ok = %F;
+            done = %f;
           end
           
           //if both src and dest are positive but different
-          if (inbinpt >= 0) & (outbinpt >= 0) & (outbinpt <> inbinpt) then 
-            ok = %F;
-            ratel_log('binary point mismatch\n', [fname, 'error']);
-            return;
-          elseif inbinpt < 0 & outbinpt >= 0 then 
-            ininfo.binpt(iport_idx) = outbinpt;
+          if (srcbinpt >= 0) & (tgtbinpt >= 0) then
+            if (srcbinpt <> tgtbinpt) then 
+              ratel_log('binary point mismatch\n', [fname, 'error']);
+              return;
+            end //if
+          elseif tgtbinpt < 0 & srcbinpt >= 0 then 
+            tgt_iinfo.binpt(tgtport_idx) = srcbinpt;
+	          //find vector of output ports of target block with
+	          //nbits equal to tgtnbits and assign it to srcnbits
+	          ww=find(tgt_oinfo.binpt==tgtbinpt);
+	          tgt_oinfo.binpt(ww)=srcbinpt;
           else
-            ok = %F;
+            done = %f;
           end
 	  
-          insign = ininfo.sign(iport_idx); 
-          innbits = ininfo.nbits(iport_idx); 
-          inbinpt = ininfo.binpt(iport_idx);
-	  ratel_log('after:\n', [fname]);
-          msg = msprintf('in: sign(%d) (%d,%d)', insign, innbits, inbinpt);   
+          tgtsign = tgt_iinfo.sign(tgtport_idx); 
+          tgtnbits = tgt_iinfo.nbits(tgtport_idx); 
+          tgtbinpt = tgt_iinfo.binpt(tgtport_idx);
+	        ratel_log('after:\n', [fname]);
+          msg = msprintf('target: sign(%d) (%d,%d)', tgtsign, tgtnbits, tgtbinpt);   
           ratel_log(msg+'\n', [fname]);
 
-          inblk.opar(1).in = ininfo;
-          bllst(connectmat(jj,3)) = inblk;  
+          //update block list
+          tgtblk.opar(1).in = tgt_iinfo;
+          tgtblk.opar(1).out = tgt_oinfo;
+          bllst(connectmat(jj,3)) = tgtblk;  
 
         end //if blocktype
       end //link loop
-      if ok then return, end //if ok is still set then gone through all links so return 
+      //if ok is still set then gone through all links so return
+      if done then 
+        ok = %t 
+        return 
+      end //if  
     end //second loop
   end  //outer loop
-  ok = %t;
 endfunction //adjust_fp
 
 function [ok, adjusted_diagram] = adjust_models(blklst, cor, diagram, offset)
@@ -878,11 +1008,15 @@ function [ok, adjusted_diagram] = adjust_models(blklst, cor, diagram, offset)
         msg = msprintf('updating models in superblock found at %d', obj_index);
         ratel_log(msg+'\n', [fname]);
         //update superblock
-        [ko, updated_obj] = adjust_models(blklst, cor, obj.model.rpar, list(offset(:), obj_index));
+        [ko, updated_diagram] = adjust_models(blklst, cor, obj.model.rpar, list(offset(:), obj_index));
         if ~ko then
           msg = msprintf('error updating models in superblock found at %d', obj_index);
           ratel_log(msg+'\n', [fname, 'error']);
         end //if
+
+        //update the adjusted diagram with updated superblock
+        adjusted_diagram.objs(obj_index).model.rpar = updated_diagram;
+
       //otherwise we have a normal block to be updated from blklst
       else, 
         location = cor(list(offset(:), obj_index));
@@ -901,7 +1035,7 @@ function [ok, adjusted_diagram] = adjust_models(blklst, cor, diagram, offset)
           obj.model = blklst(location);
           updated_obj = obj;
         else,
-          ratel_log(msprintf('%s %s excluded from update', blk_type, obj.graphics.exprs(1))+'\n', [fname, 'warning']);
+          ratel_log(msprintf('%s %s excluded from update', blk_type, obj.graphics.exprs(1))+'\n', [fname]);
         end //if location
       end //if super_block
 
