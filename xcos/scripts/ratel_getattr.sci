@@ -16,16 +16,16 @@ function[value, ok] = ratel_getattr(object, attribute)
   select attribute
     case 'sign_in' then
       value = object.opar(1).in.sign;
-    case 'n_bits_in' then
-      value = object.opar(1).in.n_bits;
-    case 'bin_pt_in' then
-      value = object.opar(1).in.bin_pt;
+    case 'nbits_in' then
+      value = object.opar(1).in.nbits;
+    case 'binpt_in' then
+      value = object.opar(1).in.binpt;
     case 'sign_out' then
       value = object.opar(1).out.sign;
-    case 'n_bits_out' then
-      value = object.opar(1).out.n_bits;
-    case 'bin_pt_out' then
-      value = object.opar(1).out.bin_pt;
+    case 'nbits_out' then
+      value = object.opar(1).out.nbits;
+    case 'binpt_out' then
+      value = object.opar(1).out.binpt;
     else
       ratel_log(msprintf('unknown attribute %s requested', attribute)+'\n',[fname, 'error']); 
       return;
