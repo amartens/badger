@@ -20,14 +20,14 @@ function [ok] = xcos2verilog(target)
   ratel_log(msprintf('adjusting diagram %s',scs_m.props.title)+'\n', [fname]);
   [ko, adjusted_scs_m] = adjust_diagram(scs_m);
   if ~ko,
-    msg = msprintf('error updating diagram %s', scs_m.props.title);
+    msg = msprintf('error updating diagram %s', adjusted_scs_m.props.title);
     ratel_log(msg+'\n', [fname, 'error']);
     return;
   end  
 
   //generate files and directories based on diagram 
-  ratel_log(msprintf('generating hdl for diagram %s', scs_m.props.title)+'\n', [fname]);
-  ko = diagram2verilog(adjusted_scs_m, connectmat, []);
+  ratel_log(msprintf('generating hdl for diagram %s', adjusted_scs_m.props.title)+'\n', [fname]);
+  ko = diagram2verilog(adjusted_scs_m, []);
 
   ok = %t;
 endfunction //xcos2verilog
