@@ -1,8 +1,9 @@
 function [adjusted_diagram, ok] = adjust_diagram(diagram)
 //various diagram sanity checks, determines port types etc
 //returns updated diagram
+//diagram = preprocessed diagram (e.g preprocess_diagram(scs_m))
   
-  ok = %f; adjusted_diagram = diagram;
+  ok = %f; adjusted_diagram = [];
   //for logging
   fname = 'adjust_diagram';
 
@@ -10,21 +11,14 @@ function [adjusted_diagram, ok] = adjust_diagram(diagram)
     ratel_log(msprintf('%s passed instead of diagram', typeof(diagram))+'\n', [fname, 'error']);
     return;
   end
+  d_temp = diagram;
+  dtitle = diagram.props.title;
 
-  //add blocks to be used during port creation
-  ratel_log(msprintf('adding port creation helper blocks to %s',diagram.props.title)+'\n', [fname]);
-  [diagram_with_helpers, ko] = add_port_helpers(diagram);
-  if ~ko,
-    msg = msprintf('error adding port creation helper blocks to diagram %s',diagram.props.title);
-    ratel_log(msg+'\n', [fname, 'error']);
-    return;
-  end 
- 
   //we run c_pass1 to do certain connectivity checks and 'flatten' structure
-  ratel_log(msprintf('running c_pass1 on %s', diagram.props.title)+'\n', [fname]);
-  [blklst, connectmat, ccmat, cor, corinv, ko]=c_pass1(diagram_with_helpers);  
+  ratel_log(msprintf('running c_pass1 on %s', dtitle)+'\n', [fname]);
+  [blklst, connectmat, ccmat, cor, corinv, ko]=c_pass1(d_temp);  
   if ~ko then
-    ratel_log('error in first pass\n', [fname, 'error']);
+    ratel_log('error in c_pass1\n', [fname, 'error']);
     return;
   end
  
@@ -55,113 +49,16 @@ function [adjusted_diagram, ok] = adjust_diagram(diagram)
   //update graphical diagram from flattened block list so that all
   //info is in one place
   ratel_log('adjusting models\n', [fname]);
-  [ko, adjusted_diagram] = adjust_models(blklst, cor, diagram_with_helpers, list());
+  [d_temp, ko] = adjust_models(blklst, cor, d_temp, list());
   if ~ko,
     msg = msprintf('error adjusting diagram models from blklst');
     ratel_log(msg+'\n', [fname, 'error']);
     return;
   end  
   
+  adjusted_diagram = d_temp;
   ok = %t;
 endfunction //adjust_diagram
-
-function[diagram_with_helpers, ok] = add_port_helpers(diagram)
-//adds blocks after input ports and before output ports that will not
-//be removed during c_pass1 that will help when generating verilog
-  diagram_with_helpers = diagram; ok = %f;
-  fname = 'add_port_helpers';
-  in_blocks=["IN_f","INIMPL_f","CLKIN_f","CLKINV_f"]
-  out_blocks=["OUT_f","OUTIMPL_f","CLKOUT_f","CLKOUTV_f"]
-  
-  if strcmp(typeof(diagram), 'diagram'),
-    ratel_log(msprintf('%s passed instead of diagram', typeof(diagram))+'\n', [fname, 'error']);
-    return;
-  end
-  
-  for obj_i = 1:length(diagram.objs),
-    obj = diagram.objs(obj_i);
-    n_objs = length(diagram_with_helpers.objs)
-
-    if typeof(obj) == 'Block' then
-      //process input port blocks
-      if or(obj.gui==in_blocks) then
-        msg = msprintf('processing %s(%d)', obj.gui, obj.model.ipar);
-        ratel_log(msg+'\n', [fname]);
-
-        //new link between input port and helper
-        lnk = scicos_link()
-        lnk.id = 'helper'
-        lnk.from = [obj_i, 1, 0]
-        lnk.to = [n_objs+1, 1, 1] 
-
-        //construct input helper block
-        io = inout('define', 'input')
-        io.graphics.exprs(1) = msprintf('%s%s', obj.gui, obj.graphics.exprs(1))
-        pout = obj.graphics.pout    
-
-        //link helper to input port's links
-        io.graphics.pout = pout       
-        //link helper to new link to input port
-        io.graphics.pin = n_objs+2
-        //change input port's link
-        obj.graphics.pout = n_objs+2
-
-        //insert new object, new link, and updated object
-        diagram_with_helpers.objs(n_objs+1) = io
-        diagram_with_helpers.objs(n_objs+2) = lnk
-        diagram_with_helpers.objs(obj_i) = obj
-    
-        //lastly update existing links to point to helper as source
-        diagram_with_helpers.objs(pout).from = [n_objs+1, 1, 0]
-
-      elseif or(obj.gui==out_blocks) then
-        msg = msprintf('processing %s(%d)', obj.gui, obj.model.ipar);
-        ratel_log(msg+'\n', [fname]);
-
-        //new link between helper and output port
-        lnk = scicos_link()
-        lnk.id = 'helper'
-        lnk.from = [n_objs+1, 1, 0]
-        lnk.to = [obj_i, 1, 1] 
-
-        //construct output helper block
-        io = inout('define', 'output')
-        io.graphics.exprs(1) = msprintf('%s%s', obj.gui, obj.graphics.exprs(1))
-        pin = obj.graphics.pin
-        //link helper to link into output port
-        io.graphics.pin = pin       
-        //link helper to new link to output port
-        io.graphics.pout = n_objs+2
-
-        obj.graphics.pin = n_objs+2
-
-        //insert new object, new link, and updated object
-        diagram_with_helpers.objs(n_objs+1) = io
-        diagram_with_helpers.objs(n_objs+2) = lnk
-        diagram_with_helpers.objs(obj_i) = obj
-    
-        //lastly update existing links to point to helper as destination
-        diagram_with_helpers.objs(pin).to = [n_objs+1, 1, 1]
-
-      elseif obj.model.sim=="super"|obj.model.sim=="csuper" then
-        msg = msprintf('adding port helpers to superblock at offset %d', obj_i);
-        ratel_log(msg+'\n', [fname]);
-        
-        //update superblock
-        [updated_super, ko] = add_port_helpers(obj.model.rpar);
-        if ~ko then
-          msg = msprintf('error adding port helpers in superblock found at %d', obj_i);
-          ratel_log(msg+'\n', [fname, 'error']);
-        end //if
-      
-        //update diagram with updated super block
-        diagram_with_helpers.objs(obj_i).model.rpar = updated_super;
-      end //if super
-    end //if Block
-  end //for
-
-  ok = %t;
-endfunction //add_port_helpers
 
 //taken from c_pass2
 //adjust_inout : it resolves positive, negative and null size
@@ -985,21 +882,16 @@ function[ok, bllst] = adjust_fp(bllst, connectmat)
   end  //outer loop
 endfunction //adjust_fp
 
-function [ok, adjusted_diagram] = adjust_models(blklst, cor, diagram, offset)
+function [adjusted_diagram, ok] = adjust_models(blklst, cor, diagram, offset)
 //adjust models in diagram from blklst using cor starting at offset
-  ok = %f; adjusted_diagram = diagram;
+  ok = %f; adjusted_diagram = [];
   fname = 'adjust_models';
  
-  if typeof(diagram) ~= 'diagram',
-    ratel_log(msprintf('%s passed instead of diagram', typeof(diagram))+'\n', [fname, 'error']);
-    return;
-  end
-
-  diagname = diagram.props.title;
+  d_temp = diagram;
 
   //iterate through diagram
-  for obj_index = 1:length(diagram.objs),
-    obj = diagram.objs(obj_index);
+  for obj_index = 1:length(d_temp.objs),
+    obj = d_temp.objs(obj_index);
 
     if typeof(obj) == 'Block' then
       updated_obj = obj;  
@@ -1010,14 +902,14 @@ function [ok, adjusted_diagram] = adjust_models(blklst, cor, diagram, offset)
         msg = msprintf('updating models in superblock found at %d', obj_index);
         ratel_log(msg+'\n', [fname]);
         //update superblock
-        [ko, updated_diagram] = adjust_models(blklst, cor, obj.model.rpar, list(offset(:), obj_index));
+        [d_sup, ko] = adjust_models(blklst, cor, obj.model.rpar, list(offset(:), obj_index));
         if ~ko then
           msg = msprintf('error updating models in superblock found at %d', obj_index);
           ratel_log(msg+'\n', [fname, 'error']);
         end //if
 
         //update the adjusted diagram with updated superblock
-        adjusted_diagram.objs(obj_index).model.rpar = updated_diagram;
+        d_temp.objs(obj_index).model.rpar = d_sup;
 
       //otherwise we have a normal block to be updated from blklst
       else, 
@@ -1042,10 +934,11 @@ function [ok, adjusted_diagram] = adjust_models(blklst, cor, diagram, offset)
       end //if super_block
 
       //update diagram with updated object 
-      adjusted_diagram.objs(obj_index) = updated_obj;
+      d_temp.objs(obj_index) = updated_obj;
     end // if Block
   end //for
     
+  adjusted_diagram = d_temp;
   ok = %t;
 endfunction //adjust_models
 
