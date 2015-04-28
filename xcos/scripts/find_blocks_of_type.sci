@@ -1,10 +1,19 @@
-function[ok, blocks, indices] = find_blocks_of_type(gui_name, diagram, levels)
-//goes through diagram, finding Blocks with specified gui type
+function[blocks, indices, ok] = find_blocks_of_type(gui_name, diagram, levels)
+//goes through diagram, finding Blocks with specified gui name
 //optionally descends into subsystems to a depth specified by levels
 //use %inf to descend to all levels, 0 for only top level
+
   ok = %f; indices = list(); blocks = list();
   fname = 'find_blocks_of_type';
-  diagname = diagram.props.title;
+
+  if strcmp(typeof(diagram), 'diagram'),
+    ratel_log(msprintf('%s passed instead of diagram', typeof(diagram))+'\n', [fname, 'error']);
+    return;
+  end
+
+  //TODO check type of gui_name and levels
+
+  dtitle = diagram.props.title;
 
   for block_index = 1:length(diagram.objs),
     obj = diagram.objs(block_index);
@@ -14,7 +23,7 @@ function[ok, blocks, indices] = find_blocks_of_type(gui_name, diagram, levels)
 
       //found a block of type requested
       if strcmp(block_type, gui_name) == 0 then
-        msg = msprintf('found %s block at index %d in %s', gui_name, block_index, diagname);
+        msg = msprintf('found %s block at index %d in %s', gui_name, block_index, dtitle);
         ratel_log(msg+'\n', [fname]);
         indices($+1) = block_index;
 	      blocks($+1) = obj;
@@ -25,7 +34,7 @@ function[ok, blocks, indices] = find_blocks_of_type(gui_name, diagram, levels)
         //get indices from superblock
         msg = msprintf('descending into superblock found at %d', block_index);
         ratel_log(msg+'\n', [fname]);
-        [ko, super_blocks, super_indices] = find_blocks_of_type(gui_name, obj.model.rpar, levels-1);
+        [super_blocks, super_indices, ko] = find_blocks_of_type(gui_name, obj.model.rpar, levels-1);
         if ~ko then
           msg = msprintf('error getting indices of %s blocks from superblock', gui_name);
           ratel_log(msg+'\n', [fname, 'error']);
