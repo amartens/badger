@@ -1,28 +1,20 @@
 function [x, y, typ] = inout(job, arg1, arg2)
 //a helper block inserted to ease creation of verilog ports
   x = []; y = []; typ = [];
-  version = 0.1;
   select job
     case 'define' then
-      port_type = arg1; //0 = output, 1 = input
-
       model = scicos_model();
 
-      model.in = 1;      
-      model.intyp = [-2]; //figure out type from what it is connected to
-      ininfo = struct('sign', [-2], 'nbits', [-2], 'binpt', [-2]);
-
-      model.out = 1;     
-      model.outtyp = [-2];//and propagate this all the way through
-      outinfo = struct('sign', [-2], 'nbits', [-2], 'binpt', [-2], 'calc', []);
-
-      settings = struct('type', port_type);
- 
-      parameters = struct('version', version, 'settings', settings, 'in', ininfo, 'out', outinfo)
+      //all input parameters are determined from source    
+      model.in = 1; model.intyp = [-2];  
+      model.insign = [-2]; model.innbits = [-2]; model.inbinpt = [-2];
+      
+      //all output parameters are determined from source    
+      model.out = 1; model.outtyp = [-2]; 
+      model.outsign = [-2]; model.outnbits = [-2]; model.outbinpt = [-2];
       
       //this must be a list, not a struct apparently
-      model.opar = list(parameters);
-      model.ipar = 0; //0 = input, 1 = output
+      model.ipar = arg1; //1 = input, 0 = output
 
       //create scicos block with standard settings  
       //TODO input and output labels 

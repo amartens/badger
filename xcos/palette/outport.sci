@@ -1,6 +1,5 @@
 function [x, y, typ] = outport(job, arg1, arg2)
   x = []; y = []; typ = [];
-  version = 0.3;
   select job
     case 'set' then
       x=arg1;
@@ -18,24 +17,17 @@ function [x, y, typ] = outport(job, arg1, arg2)
       end //while
         
       if ok then
-        x.model=model;
-        exprs(1) = label;
+        x.model=model
+        exprs(1) = label
         graphics.exprs = exprs
-        x.graphics = graphics;
+        x.graphics = graphics
       end //if
 
     case 'define' then
-      model = scicos_model();
-      model.out = 1;
-      model.outtyp = [-1];
-      outinfo = struct('sign', [-1], 'nbits', [-1], 'binpt', [-1], 'adjust', 'outport_adjust');
-      model.in = 1;
-      model.intyp = [6];
-      ininfo = struct('sign', [-1], 'nbits', [-1], 'binpt', [-1]);
-      //default settings
-      settings = struct();
-      parameters = struct('version', version, 'settings', settings, 'in', ininfo, 'out', outinfo);
-      model.opar = list(parameters);
+      model = scicos_model()
+      model.sim = list('outport', 4); //TODO version 4?
+      model.out = 1; model.outtyp = [-1]
+      model.in = 1; model.intyp = [6]
       //create scicos block with standard settings
       //TODO make graphics nicer
       x = ratel_block_gen([2 1], model, [""], [], [])
