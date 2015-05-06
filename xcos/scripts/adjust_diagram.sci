@@ -703,7 +703,7 @@ function [ok,bllst]=adjust_typ(bllst,connectmat)
         inouttyp=under_connection(corinv(connectmat(jj,1)),connectmat(jj,2),nouttyp,..
       corinv(connectmat(jj,3)),connectmat(jj,4),nintyp,2)			   
         //
-        if inouttyp<1|inouttyp>8 then ok=%f;return;end
+//        if inouttyp<1|inouttyp>8 then ok=%f;return;end
         //
         ww=find(bllst(connectmat(jj,1)).outtyp==nouttyp)
         bllst(connectmat(jj,1)).outtyp(ww)=inouttyp
@@ -749,16 +749,20 @@ function[ok, bllst] = adjust_fp(bllst, connectmat)
       for jj=1:nlnk //loop on number of link
         srcblk = bllst(connectmat(jj,1)); 
         tgtblk = bllst(connectmat(jj,3));
+        
+        src_outtyp = srcblk.outtyp; tgt_intyp = tgtblk.intyp;
+        if src_outtyp == 9,
+          //TODO convert to scicos_fpmodel if necessary
+        end
+        if tgt_intyp == 9,
+          //TODO convert to scicos_fpmodel if necessary
+        end
+
         //we only care about links where source and destination
         //blocks use fixed point
-        src_obt = srcblk.blocktype; tgt_ibt = tgtblk.blocktype;
-        if (strcmp(src_obt, 'f') == 0) & (strcmp(tgt_ibt, 'f') == 0) then
+        if (src_outtyp == 9) & (tgt_intyp == 9) then
           msg = msprintf('processing fixed point link between %d and %d', connectmat(jj,1), connectmat(jj,3));  
           ratel_log(msg+'\n', [fname]);
-          //in/outinfo are parameter structs for blocks
-          //containing fixed point info for ports
-          src_oinfo = srcblk.opar(1).out; tgt_iinfo = tgtblk.opar(1).in;
-          tgt_oinfo = tgtblk.opar(1).out;
 
           srcport_idx = connectmat(jj,2); tgtport_idx = connectmat(jj,4);
 
@@ -767,25 +771,25 @@ function[ok, bllst] = adjust_fp(bllst, connectmat)
           //if still no luck, then mark as negative for this run
 
           srcsign = -1; srcnbits = -1; srcbinpt = -1;
-          if (length(src_oinfo.sign) >= srcport_idx) then 
-            srcsign = src_oinfo.sign(srcport_idx); 
+          if (length(srcblk.outsign) >= srcport_idx) then 
+            srcsign = srcblk.outsign(srcport_idx); 
           end
-          if (length(src_oinfo.nbits) >= srcport_idx) then 
-            srcnbits = src_oinfo.nbits(srcport_idx); 
+          if (length(srcblk.outnbits) >= srcport_idx) then 
+            srcnbits = srcblk.outnbits(srcport_idx); 
           end
-          if (length(src_oinfo.binpt) >= srcport_idx) then  
-            srcbinpt = src_oinfo.binpt(srcport_idx);
+          if (length(srcblk.outbinpt) >= srcport_idx) then  
+            srcbinpt = srcblk.outbinpt(srcport_idx);
           end
           
           tgtsign = -1; tgtnbits = -1; tgtbinpt = -1;
-          if (length(tgt_iinfo.sign) >= tgtport_idx) then 
-            tgtsign = tgt_iinfo.sign(tgtport_idx); 
+          if (length(tgtblk.insign) >= tgtport_idx) then 
+            tgtsign = tgtblk.insign(tgtport_idx); 
           end
-          if (length(tgt_iinfo.nbits) >= tgtport_idx) then 
-            tgtnbits = tgt_iinfo.nbits(tgtport_idx); 
+          if (length(tgtblk.innbits) >= tgtport_idx) then 
+            tgtnbits = tgtblk.innbits(tgtport_idx); 
           end
-          if (length(tgt_iinfo.binpt) >= tgtport_idx) then  
-            tgtbinpt = tgt_iinfo.binpt(tgtport_idx);
+          if (length(tgtblk.inbinpt) >= tgtport_idx) then  
+            tgtbinpt = tgtblk.inbinpt(tgtport_idx);
           end
 
 	        ratel_log('before:\n', [fname]);
@@ -818,11 +822,11 @@ function[ok, bllst] = adjust_fp(bllst, connectmat)
           //if src has a sign but target doesn't
           elseif tgtsign < 0 & srcsign >= 0 then 
             //update target port with sign
-            tgt_iinfo.sign(tgtport_idx) = srcsign;
+            tgtblk.insign(tgtport_idx) = srcsign;
 	          //find vector of output ports of target block with
 	          //sign equal to tgtsign and assign it to srcsign
-	          ww=find(tgt_oinfo.sign==tgtsign)
-	          tgt_oinfo.sign(ww)=srcsign
+	          ww=find(tgtblk.insign==tgtsign)
+	          tgtblk.insign(ww)=srcsign
           else
             done = %f;
           end
@@ -834,11 +838,11 @@ function[ok, bllst] = adjust_fp(bllst, connectmat)
               return;
             end //if
           elseif tgtnbits < 0 & srcnbits >= 0 then 
-            tgt_iinfo.nbits(tgtport_idx) = srcnbits;
+            tgtblk.innbits(tgtport_idx) = srcnbits;
 	          //find vector of output ports of target block with
 	          //nbits equal to tgtnbits and assign it to srcnbits
-	          ww=find(tgt_oinfo.nbits==tgtnbits)
-	          tgt_oinfo.nbits(ww)=srcnbits
+	          ww=find(tgtblk.innbits==tgtnbits)
+	          tgtblk.innbits(ww)=srcnbits
           else
             done = %f;
           end
@@ -850,31 +854,29 @@ function[ok, bllst] = adjust_fp(bllst, connectmat)
               return;
             end //if
           elseif tgtbinpt < 0 & srcbinpt >= 0 then 
-            tgt_iinfo.binpt(tgtport_idx) = srcbinpt;
+            tgtblk.inbinpt(tgtport_idx) = srcbinpt;
 	          //find vector of output ports of target block with
 	          //nbits equal to tgtnbits and assign it to srcnbits
-	          ww=find(tgt_oinfo.binpt==tgtbinpt);
-	          tgt_oinfo.binpt(ww)=srcbinpt;
+	          ww=find(tgtblk.inbinpt==tgtbinpt);
+	          tgtblk.inbinpt(ww)=srcbinpt;
           else
             done = %f;
           end
 	  
-          tgtsign = tgt_iinfo.sign(tgtport_idx); 
-          tgtnbits = tgt_iinfo.nbits(tgtport_idx); 
-          tgtbinpt = tgt_iinfo.binpt(tgtport_idx);
+          tgtsign = tgtblk.insign(tgtport_idx); 
+          tgtnbits = tgtblk.innbits(tgtport_idx); 
+          tgtbinpt = tgtblk.inbinpt(tgtport_idx);
 	        ratel_log('after:\n', [fname]);
           msg = msprintf('target: sign(%d) (%d,%d)', tgtsign, tgtnbits, tgtbinpt);   
           ratel_log(msg+'\n', [fname]);
 
           //update block list
-          tgtblk.opar(1).in = tgt_iinfo;
-          tgtblk.opar(1).out = tgt_oinfo;
           bllst(connectmat(jj,3)) = tgtblk;  
 
         end //if blocktype
       end //link loop
       //if ok is still set then gone through all links so return
-      if done then 
+      if done, 
         ok = %t 
         return 
       end //if  
