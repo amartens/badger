@@ -19,7 +19,7 @@ function o=ratel_block_gen(sz, model, exprs, in_labels, out_labels)
   if gr_i(2)==[] then gr_i(2)=8,end
   if gr_i(2)==0 then gr_i(2)=[],end
   
-  model.blocktype = 'f';
+  model.blocktype = 'd';
 
   graphics=scicos_graphics();
   graphics.exprs=exprs;

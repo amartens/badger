@@ -1,6 +1,6 @@
-//used to generate badger palette
-function [status] = ratel_gen()
-  status = %f;
+//used to generate ratel palette
+function [ok] = ratel_gen()
+  ok = %f;
 
   loadXcosLibs;
 
@@ -12,39 +12,31 @@ function [status] = ratel_gen()
 
   //construct basic palette
   basic_blocks = list('inport', 'outport');
-  [status, basic_pal] = palette_gen('basic', basic_blocks);
-//  if (status != %t) then
+  [ko, basic_pal] = palette_gen('basic', basic_blocks);
+  if ~ok,
     //TODO
-//  end
-  [status, msg] = xcosPalAdd(basic_pal, 'ratel');
-//  if (status != %t) then
+  end
+  [ko, msg] = xcosPalAdd(basic_pal, 'ratel');
+  if ~ok,
     //TODO
-//  end
+  end
   
-  //construct math palette
-  math_blocks = list('add');
-  [status, math_pal] = palette_gen('math', math_blocks);
-//  if (status != %t) then
-    //TODO
-//  end
-  [status, msg] = xcosPalAdd(math_pal, 'ratel');
-//  if (status != %t) then
-    //TODO
-//  end
-  
-  status = %t;
+  ok = %t;
 endfunction
 
 //create palette with name palette_name and add list of blocks with names in block_names
-function [status, palette] = palette_gen(palette_name, block_names)
-  status = %f; 
+function [ok, palette] = palette_gen(palette_name, block_names)
+  ok = %f; 
   palette = xcosPal(palette_name);
   
   for block_index = 1:size(block_names)
     block_name = block_names(block_index);
-    delete_icon(block_name);
+    ko = delete_icon(block_name);
+    if ~ko,
+      //TODO
+    end
 
-    //this adds a label to the middle of the block based on label at first position
+    //this adds a label to the block based on label at first position
     //in graphics.exprs
     style = struct( ..
                     'noLabel', '0', ..
@@ -54,12 +46,12 @@ function [status, palette] = palette_gen(palette_name, block_names)
     palette = xcosPalAddBlock(palette, block_name, [], style);
   end
 
-  status = %t;
+  ok = %t;
 endfunction
 
 //helper to remove block images that may already exist
-function [status] = delete_icon(block_name)
-  status = %f;
+function [ok] = delete_icon(block_name)
+  ok = %f;
   gif_filename = msprintf("%s/%s.gif", TMPDIR, block_name);
   [fd, err] = mopen(gif_filename);
   //if exists
@@ -75,5 +67,5 @@ function [status] = delete_icon(block_name)
     mclose(fd);
     mdelete(svg_filename);
   end 
-  status = %t;
+  ok = %t;
 endfunction
