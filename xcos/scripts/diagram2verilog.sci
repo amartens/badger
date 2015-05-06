@@ -67,18 +67,19 @@ function[ok] = diagram2verilog(diagram, target)
     return;
   end //if
 
-  //create links
-  ratel_log('generating links\n', [fname]);
-  [ko] = links2verilog(fd, diagram, []);
+  //create blocks
+  ratel_log('processing blocks\n', [fname]);
+  [ko] = blocks2verilog(fd, diagram); 
   if ~ko then
-    ratel_log('error translating links\n', [fname, 'error']);
+    ratel_log('error translating blocks to HDL\n', [fname, 'error']);
     return;
   end //if
 
-  //create blocks
-  //[ok] = blocks2verilog(fd, blocks, links); 
-  //if ~ok ten
-  //  ratel_log('error translating blocks\n', [fname, 'error']);
+  //create links
+  //ratel_log('processing links\n', [fname]);
+  //[ko] = links2verilog(fd, diagram);
+  //if ~ko then
+  //  ratel_log('error translating links to HDL\n', [fname, 'error']);
   //  return;
   //end //if
 
@@ -234,13 +235,60 @@ function[ok] = verilog_epilogue(fd, module_name)
   ok = %t;
 endfunction //verilog_epilogue 
 
-function[ok] = blocks2verilog(fd, blocks, links)
-  //TODOs
+function[ok] = blocks2verilog(fd, diagram)
+//convert xcos blocks in diagram to verilog
+  ok = %f;
+  fname = 'blocks2verilog';
+
+  for index = 1:length(diagram.objs),
+    obj = diagram.objs(index);
+    if typeof(obj) == 'Block' then
+      blk = obj;
+      
+      //determine name of block
+      gui = blk.gui; id = blk.graphics.id; label = blk.model.label;   
+      
+      //use graphical id if available
+      if ~isempty(id), blk_name = id;
+      //use model label if available
+      elseif ~isempty(label), blk_name = label;
+      //use block type and index
+      else, blk_name = msprintf('%s%d', gui, index);
+      end
+    
+      ratel_log(msprintf('block %d:', index)+'\n', [fname]);
+      ratel_log(msprintf('name :%s', blk_name)+'\n', [fname]);
+          
+ 
+    end //if 
+  end //for 
   ok = %t;
 endfunction //blocks2verilog
 
-function[ok] = links2verilog(fd, diagram, offset)
-//convert xcos links to verilog wires
+function[info, ok] = blk_info(blk)
+//get port info needed for HDL generation
+  ok = %f; 
+  
+  //get port characteristics for this block 
+  in = blk.model.in; in2 = blk.model.in2; intyp = blk.model.intyp;
+  out = blk.model.out; out2 = blk.model.out2; outtyp = blk.model.outtyp;
+  evtin = blk.model.evtin; evtout = blk.model.evtout;
+
+  //get port labels
+  in_label = blk.graphics.in_label;
+  out_label = blk.graphics.out_label;
+
+  //get parameters for this block
+  rpar = blk.model.rpar; ipar = blk.model.ipar; opar = blk.model.opar;
+
+  //get block simulation model
+  sim = blk.model.sim;  
+ 
+  ok = %t;
+endfunction //block_info
+
+function[ok] = links2verilog(fd, diagram)
+//convert xcos links in diagram to verilog
   ok = %f;
   fname = 'links2verilog';
 
