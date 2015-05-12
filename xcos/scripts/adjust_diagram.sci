@@ -38,22 +38,30 @@ function [adjusted_diagram, ok] = adjust_diagram(diagram)
     return;
   end
 
-  //adjust fixed point info for blocks
-  ratel_log('adjusting fixed point info\n', [fname]);
-  [ko, blklst] = adjust_fp(blklst, connectmat)
+  //convert models to include fixed point info
+  ratel_log('adding fixed point info to models\n', [fname]);
+  [blklst, ko] = fpmodels(blklst);
   if ~ko then
-    ratel_log('error adjusting fixed point info\n', [fname, 'error']);
+    ratel_log('error adding fixed point info to models\n', [fname, 'error'])
     return;
+  end
+
+  //adjust fixed point info for blocks
+  ratel_log('adjusting fixed point info\n', [fname])
+  [blklst, ko] = adjust_fp(blklst, connectmat)
+  if ~ko,
+    ratel_log('error adjusting fixed point info\n', [fname, 'error'])
+    return
   end
 
   //update graphical diagram from flattened block list so that all
   //info is in one place
-  ratel_log('adjusting models\n', [fname]);
+  ratel_log('adjusting models\n', [fname])
   [d_temp, ko] = adjust_models(blklst, cor, d_temp, list());
   if ~ko,
-    msg = msprintf('error adjusting diagram models from blklst');
-    ratel_log(msg+'\n', [fname, 'error']);
-    return;
+    msg = msprintf('error adjusting diagram models from blklst')
+    ratel_log(msg+'\n', [fname, 'error'])
+    return
   end  
   
   adjusted_diagram = d_temp;
@@ -731,7 +739,36 @@ function [ok,bllst]=adjust_typ(bllst,connectmat)
   end
 endfunction //adjust_typ
 
-function[ok, bllst] = adjust_fp(bllst, connectmat)
+function[bllst, ok] = fpmodels(blklst)
+//fpmodels: converts models using fixed point type (9) to fpmodels
+  ok = %f; bllst = [];
+
+  //go through all blocks
+  for n = 1:length(blklst)
+    blk = blklst(n)
+    if ~isempty(find(blk.intyp == 9)) | ~isempty(find(blk.outtyp == 9))
+      li = length(blk.in); lo = length(blk.out);
+      blklst(n) = tlist(['fpmodel', ..
+      "sim","in","in2","intyp","out","out2","outtyp",...
+      "insign","innbits","inbinpt","outsign","outnbits","outbinpt",...
+      "evtin","evtout","state","dstate","odstate","rpar","ipar","opar",...
+      "blocktype","firing","dep_ut","label","nzcross",..
+      "nmode","equations","uid"],..
+      blk.sim, blk.in, blk.in2, blk.intyp,...
+      blk.out, blk.out2, blk.outtyp,...
+      repmat(-1,li,1), repmat(-1,li,1), repmat(-1,li,1),... 
+      repmat(-1,lo,1), repmat(-1,lo,1), repmat(-1,lo,1),... 
+      blk.evtin, blk.evtout, blk.state, blk.dstate, blk.odstate,...
+      blk.rpar, blk.ipar, blk.opar, blk.blocktype, blk.firing,...
+      blk.dep_ut, blk.label, blk.nzcross, blk.nmode, blk.equations, blk.uid);
+    end //if
+  end //for
+
+  bllst = blklst
+  ok = %t
+endfunction //fpmodels
+
+function[bllst, ok] = adjust_fp(bllst, connectmat)
 //adjust_fp: Resolves fp info.
 //  based on adjust_inout algorithm
 //  Andrew: 05/12/2014
@@ -747,16 +784,9 @@ function[ok, bllst] = adjust_fp(bllst, connectmat)
     for hh=1:length(bllst)+1 //second loop on number of block
       done=%t
       for jj=1:nlnk //loop on number of link
-        srcblk = bllst(connectmat(jj,1)); 
-        tgtblk = bllst(connectmat(jj,3));
+        srcblk = bllst(connectmat(jj,1)); tgtblk = bllst(connectmat(jj,3));
         
         src_outtyp = srcblk.outtyp; tgt_intyp = tgtblk.intyp;
-        if src_outtyp == 9,
-          //TODO convert to scicos_fpmodel if necessary
-        end
-        if tgt_intyp == 9,
-          //TODO convert to scicos_fpmodel if necessary
-        end
 
         //we only care about links where source and destination
         //blocks use fixed point
