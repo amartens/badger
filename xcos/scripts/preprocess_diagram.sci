@@ -12,7 +12,17 @@ function[preprocessed_diagram, ok] = preprocess_diagram(diagram)
   end
 
   dtitle = diagram.props.title;
-  d_temp = diagram;
+  temp = diagram;
+
+  //change port output data types of blocks where appropriate to fixed point type.
+  //this will propagate when adjust_typ is called
+  ratel_log(msprintf('converting output type of blocks to fixed point in %s',dtitle)+'\n', [fname]);
+  [temp, ko] = introduce_fixed_point(temp)
+  if ~ko,
+    msg = msprintf('error while converting output ports of some blocks to fixed point in %s',dtitle);
+    ratel_log(msg+'\n', [fname, 'error']);
+    return;
+  end 
 
   //TODO bubble inport and outport links to top by searching in all component superblocks for
   //inports and outports, and creating input and output ports and links in diagram
@@ -23,16 +33,52 @@ function[preprocessed_diagram, ok] = preprocess_diagram(diagram)
 
   //add blocks to be used during port creation to determine port characteristics
   ratel_log(msprintf('adding port creation helper blocks to %s',dtitle)+'\n', [fname]);
-  [d_temp, ko] = add_port_helpers(d_temp);
+  [temp, ko] = add_port_helpers(temp);
   if ~ko,
     msg = msprintf('error adding port creation helper blocks to diagram %s',dtitle);
     ratel_log(msg+'\n', [fname, 'error']);
     return;
   end 
 
-  preprocessed_diagram = d_temp;
+  preprocessed_diagram = temp;
   ok = %t;
 endfunction //preprocess_diagram
+
+function[diagram_with_fp, ok] = introduce_fixed_point(diagram)
+//converts output ports of certain blocks to fixed point type
+  diagram_with_fp = []; ok = %f
+  fname = 'introduce_fixed_point'
+  fpblocks = ['inport'] //TODO other block types?
+
+  temp = diagram;
+  for i = 1:length(temp.objs), 
+    obj = temp.objs(i)
+    if typeof(obj) == 'Block',
+      if or(obj.gui==fpblocks),
+        msg = msprintf('introducing fixed point to %s at offset %d', obj.gui, i);
+        ratel_log(msg+'\n', [fname]);
+        
+        //convert all output ports to fixed point type
+        obj.model.outtyp = repmat(9, length(obj.model.outtyp), 1)
+        temp.objs(i) = obj
+      elseif obj.model.sim=="super"|obj.model.sim=="csuper" then
+        msg = msprintf('introducing fixed point to superblock at offset %d', i);
+        ratel_log(msg+'\n', [fname]);
+        
+        //update superblock
+        [updated_super, ko] = introduce_fixed_point(obj.model.rpar);
+        if ~ko then
+          msg = msprintf('error while introducing fixed point in superblock found at %d', i);
+          ratel_log(msg+'\n', [fname, 'error']);
+        end //if
+      
+        //update diagram with updated super block
+        temp.objs(i).model.rpar = updated_super;
+      end //if fpblocks
+    end //if Block
+  end //for
+  diagram_with_fp = temp; ok = %t
+endfunction //introduce_fixed_point
 
 function[diagram_with_helpers, ok] = add_port_helpers(diagram)
 //adds blocks after input ports and before output ports that will not
