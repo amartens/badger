@@ -27,7 +27,7 @@ function [x, y, typ] = outport(job, arg1, arg2)
       model = scicos_model()
       model.sim = list('outport', 4); //TODO version 4?
       model.out = 1; model.outtyp = [-1]
-      model.in = 1; model.intyp = [6]
+      model.in = 1; model.intyp = [-1]
       //create scicos block with standard settings
       //TODO make graphics nicer
       x = ratel_block_gen([2 1], model, [""], [], [])
