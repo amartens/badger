@@ -828,44 +828,45 @@ function[bllst, ok] = adjust_fp(bllst, connectmat)
           msg = msprintf('target: sign(%d) (%d,%d)', tgtsign, tgtnbits, tgtbinpt);   
           ratel_log(msg+'\n', [fname]);
 
-          //TODO
           //ask block to determine its own output settings
-          //if outsign < 0 | outnbits < 0 | outbinpt < 0 then
-          //  outcalc = outinfo.outcalc;  //function to calculate out info
-          //  fn_call_str = msprintf('[x] = %s(''adjust'', outblk)', outcalc); 
-          //  execstr(fn_call_str);
-          //  //TODO how to check for errors? 
-          //end
-          //bllst(connectmat(jj,1)) = x;
-          //outinfo = x.opar(1).out;
-          //outsign = -1; outnbits = -1; outbinpt = -1;
-          //outsign = outinfo.sign(outport);
-          //outnbits = outinfo.nbits(outport);
-          //outbinpt = outinfo.binpt(outport);
+          if srcsign < 0 | srcnbits < 0 | srcbinpt < 0 then
+            [blk, ok] = adjust_blkfp(srcblk)
+	          if ~ok,
+              //TODO not very useful error msg 
+              ratel_log('error while adjusting fixed point info\n', [fname]);
+              blk = srcblk //don't update blk
+            end
+            //update the list with the new blk and get
+            //fixed point info from it   
+            bllst(connectmat(jj,1)) = blk
+            srcsign = blk.outsign(srcport_idx)
+            srcnbits = blk.outnbits(srcport_idx)
+            srcbinpt = blk.outbinpt(srcport_idx)
+          end //if
          
           //if both src and dest are positive but different
           if (tgtsign >= 0) & (srcsign >= 0) then 
             if (srcsign <> tgtsign) then 
-              ratel_log('sign mismatch\n', [fname, 'error']);
-              return;
+              ratel_log('sign mismatch\n', [fname, 'error'])
+              return
             end //if
           //if src has a sign but target doesn't
           elseif tgtsign < 0 & srcsign >= 0 then 
             //update target port with sign
-            tgtblk.insign(tgtport_idx) = srcsign;
+            tgtblk.insign(tgtport_idx) = srcsign
 	          //find vector of output ports of target block with
 	          //sign equal to tgtsign and assign it to srcsign
 	          ww=find(tgtblk.insign==tgtsign)
 	          tgtblk.insign(ww)=srcsign
           else
-            done = %f;
+            done = %f
           end
           
           //if both src and dest are positive but different
           if (srcnbits >= 0) & (tgtnbits >= 0) then
             if (srcnbits <> tgtnbits) then 
-              ratel_log('number bits mismatch\n', [fname, 'error']);
-              return;
+              ratel_log('number bits mismatch\n', [fname, 'error'])
+              return
             end //if
           elseif tgtnbits < 0 & srcnbits >= 0 then 
             tgtblk.innbits(tgtport_idx) = srcnbits;
@@ -913,6 +914,52 @@ function[bllst, ok] = adjust_fp(bllst, connectmat)
     end //second loop
   end  //outer loop
 endfunction //adjust_fp
+
+function[adjusted_blk, ok] = adjust_blkfp(blk)
+  ok = %f; adjusted_blk = blk;
+  fname = 'adjust_blkfp';
+
+  fn_name = msprintf('%s_adjust', blk.sim(1))
+  ratel_log(msprintf('fn_name = %s',fn_name)+'\n',[fname])
+  // if adjust object with right name exists
+  if exists(fn_name),
+    str = msprintf('t = typeof(%s)', fn_name) 
+    execstr(str)
+    if ~exists('t'),
+      ratel_log(msprintf('execstr(''%s'') returned no result',str)+'\n', {'error',[fname]});
+      return
+    else,
+      if isempty(t),
+        ratel_log(msprintf('execstr(''%s'') returned empty result',str)+'\n', {'error',[fname]});
+        return
+      else,              
+        //and it is a function
+        if t == 'function',
+          //call it asking it to determine fixed point info for srcblk
+          fn_call_str = msprintf('[x] = %s(''fp'', blk)',fn_name)
+          execstr(fn_call_str)
+          if ~exists('x'),
+            ratel_log(msprintf('execstr(''%s'') returned no result',fn_call_str)+'\n', [fname]);
+            return
+          else,
+            if isempty(x),
+              ratel_log(msprintf('execstr(''%s'') returned empty result',fn_call_str)+'\n', {'error',[fname]})
+              return
+            else,
+              tx = typeof(x)
+              if tx ~= 'fpmodel',
+                ratel_log(msprintf('execstr(''%s'') returned %s instead of fpmodel',fn_call_str,typeof(x))+'\n', {'error',[fname]})
+                return  
+              end 
+            end
+          end //if ~exists(x)
+        end //if t == function
+      end //isempty(t)
+    end //~exists(t)
+  end //exists(fn_fname)
+  
+  ok = %t; adjusted_blk = x;
+endfunction
 
 function [adjusted_diagram, ok] = adjust_models(blklst, cor, diagram, offset)
 //adjust models in diagram from blklst using cor starting at offset
