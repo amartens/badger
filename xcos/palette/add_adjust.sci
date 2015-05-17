@@ -2,11 +2,9 @@ function [x] = add_adjust(job, arg1)
   fname = 'add_adjust';
   x = [];
   select job
-    case 'adjust' then
+    case 'fp' then
       ratel_log('calculating output data info\n', [fname]);
       x = arg1;
-      parameters = x.opar(1);
-      ininfo = parameters.in;
       intype = x.intyp; insign = ininfo.sign; 
       innbits = ininfo.nbits; inbinpt = ininfo.binpt;
       //if any input is signed, make output signed 
