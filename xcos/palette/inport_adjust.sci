@@ -9,5 +9,6 @@ function [x] = inport_adjust(job, arg1)
       x = blk;
     case 'hdl' then
       ratel_log('adjusting graphics info for hdl generation\n', [fname]);
+      x = arg1 //pass block back unchanged
   end
 endfunction
