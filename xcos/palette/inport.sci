@@ -68,13 +68,13 @@ function [x, y, typ] = inport(job, arg1, arg2)
     case 'define' then
       model = scicos_model()
       model.sim = list('inport', 4); //TODO version 4?
-      model.out = 1; model.outtyp = [6]; //uint32 type for the moment 
-      model.in = 1; model.intyp = [-1];      //figure out type from what it is connected to
-                    //outsign, outnbits, outbinpt, overflow, quantization
-      model.ipar = list(0, 1, 0, 0, 0) 
+      model.out = 1; model.outtyp = [];
+      model.in = 1; model.intyp = [-2];      //figure out type from what it is connected to
+                      //outsign, outnbits, outbinpt, overflow, quantization
+      model.ipar = list(0,        1,        0,          0,        0) 
       //create scicos block with standard settings
   
       //TODO input and output labels 
-      x = ratel_block_gen([2 1], model, [""], [], [])
+      x = ratel_block_gen([2 1], model, [""], ['sim'], [])
   end
 endfunction
