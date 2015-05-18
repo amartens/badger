@@ -266,54 +266,60 @@ endfunction //verilog_epilogue
 
 function[ok] = blocks2verilog(fd, diagram)
 //convert xcos blocks in diagram to verilog
-  ok = %f;
-  fname = 'blocks2verilog';
+  ok = %f; fname = 'blocks2verilog';
+  ignore_blocks = ['inport', 'outport'] //TODO other block types?
 
   for index = 1:length(diagram.objs),
-    obj = diagram.objs(index);
-    if typeof(obj) == 'Block' then
-      blk = obj;
-      
-      //determine name of block
-      gui = blk.gui; id = blk.graphics.id; label = blk.model.label;   
-      
-      //use graphical id if available
-      if ~isempty(id), blk_name = id;
-      //use model label if available
-      elseif ~isempty(label), blk_name = label;
-      //use block type and index
-      else, blk_name = msprintf('%s%d', gui, index);
+    obj = diagram.objs(index)
+    //we only convert blocks with fixed point models to verilog
+    if typeof(obj) == 'Block' & typeof(obj.model) == 'fpmodel',
+      [blk, ko] = block_adjust('hdl', obj),
+      if ~ko,
+        msg = msprintf('error while getting hdl info for %s %d:', obj.gui, index)
+        ratel_log(msg+'\n', ['error', fname])
       end
-    
-      ratel_log(msprintf('block %d:', index)+'\n', [fname]);
-      ratel_log(msprintf('name :%s', blk_name)+'\n', [fname]);
+
+      //we will need some of this info for links etc so save it
+      diagram.objs(index) = blk;
  
+      //we ignore certain blocks as they are handled differently
+      if ~or(obj.gui==ignore_blocks) then
+        ratel_log(msprintf('converting %s to verilog', blk.graphics.id)+'\n', [fname])
+        ko = block2verilog(fd, blk)
+        if ~ko,
+          ratel_log(msprintf('error while converting %s to verilog', blk.graphics.id)+'\n', {'error', [fname]})
+        end //if
+      end //if
     end //if 
   end //for 
   ok = %t;
 endfunction //blocks2verilog
 
-function[info, ok] = blk_info(blk)
-//get port info needed for HDL generation
-  ok = %f; 
+function[ok] = block2verilog(fd, blk)
+  ok = %f
+  //*************************//
+  // determine name of block //
+  //*************************//
+  gui = blk.gui; id = blk.graphics.id; label = blk.model.label;   
   
-  //get port characteristics for this block 
-  in = blk.model.in; in2 = blk.model.in2; intyp = blk.model.intyp;
-  out = blk.model.out; out2 = blk.model.out2; outtyp = blk.model.outtyp;
-  evtin = blk.model.evtin; evtout = blk.model.evtout;
+  //use graphical id if available
+  if ~isempty(id), blk_name = id;
+  //use model label if available
+  elseif ~isempty(label), blk_name = label;
+  //use block type and index
+  else, blk_name = msprintf('%s%d', gui, index);
+  end
 
-  //get port labels
-  in_label = blk.graphics.in_label;
-  out_label = blk.graphics.out_label;
+  //input labels
 
-  //get parameters for this block
-  rpar = blk.model.rpar; ipar = blk.model.ipar; opar = blk.model.opar;
+  //output labels
 
-  //get block simulation model
-  sim = blk.model.sim;  
- 
-  ok = %t;
-endfunction //block_info
+  //clocks in
+
+  //clocks out
+
+  ok = %t
+endfunction //block2verilog
 
 function[ok] = links2verilog(fd, diagram)
 //convert xcos links in diagram to verilog
