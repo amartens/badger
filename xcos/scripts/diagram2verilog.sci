@@ -69,21 +69,22 @@ function[ok] = diagram2verilog(diagram, target)
 
   //create blocks
   ratel_log('processing blocks\n', [fname])
-  [ko] = blocks2verilog(fd, diagram)
+  [diagram_hdl, ko] = blocks2verilog(fd, diagram)
   if ~ko then
     ratel_log('error translating blocks to HDL\n', [fname, 'error'])
     return
   end //if
 
   //create links
-  //ratel_log('processing links\n', [fname]);
-  //[ko] = links2verilog(fd, diagram);
-  //if ~ko then
-  //  ratel_log('error translating links to HDL\n', [fname, 'error']);
-  //  return;
-  //end //if
+  ratel_log('processing links\n', [fname]);
+  [ko] = links2verilog(fd, diagram_hdl);
+  if ~ko then
+    ratel_log('error translating links to HDL\n', [fname, 'error']);
+    return;
+  end //if
 
   //verilog epilogue
+  ratel_log('closing off verilog module definition\n', [fname])
   [ko] = verilog_epilogue(fd, dtitle)
   if ~ko then
     ratel_log(msprintf('error writing epilogue for %s', dtitle) + '\n', [fname, 'error'])
@@ -264,9 +265,9 @@ function[ok] = verilog_epilogue(fd, module_name)
   ok = %t;
 endfunction //verilog_epilogue 
 
-function[ok] = blocks2verilog(fd, diagram)
+function[diagram_hdl, ok] = blocks2verilog(fd, diagram)
 //convert xcos blocks in diagram to verilog
-  ok = %f; fname = 'blocks2verilog';
+  ok = %f; diagram_hdl = []; fname = 'blocks2verilog';
   ignore_blocks = ['inport', 'outport'] //TODO other block types?
 
   for index = 1:length(diagram.objs),
@@ -292,14 +293,17 @@ function[ok] = blocks2verilog(fd, diagram)
       end //if
     end //if 
   end //for 
+  diagram_hdl = diagram
   ok = %t;
 endfunction //blocks2verilog
 
 function[ok] = block2verilog(fd, blk)
   ok = %f
+
   //*************************//
   // determine name of block //
   //*************************//
+
   gui = blk.gui; id = blk.graphics.id; label = blk.model.label;   
   
   //use graphical id if available
@@ -310,9 +314,12 @@ function[ok] = block2verilog(fd, blk)
   else, blk_name = msprintf('%s%d', gui, index);
   end
 
+      //mfprintf(fd, '\twire %s;\n', link_name);
   //input labels
+  //TODO
 
   //output labels
+  //TODO
 
   //clocks in
 
@@ -341,34 +348,65 @@ function[ok] = links2verilog(fd, diagram)
 
       //we use the block with the output port as the name
       if from_type == 0 then
-        source_index = from_index;
-        source_port = from_port;
+        source_index = from_index; source_port = from_port;
+        tgt_index = to_index; tgt_port = to_port;
       else
-        source_index = to_index;
-        source_port = to_port;
+        source_index = to_index; source_port = to_port;
+        tgt_index = from_index; tgt_port = from_port;
       end //if
 
-      if source_index > length(diagram.objs) then
-        msg = msprintf('source index (%d) for link (%d) exceeds number of blocks (%d)', source_index, link_index, length(objects));
+      if source_index > length(diagram.objs),
+        msg = msprintf('source index (%d) for link (%d) exceeds number of blocks (%d)', source_index, link_index, length(diagram.objs));
         ratel_log(msg+'\n', [fname, 'error']);
         return;
       end
 
       source_block = diagram.objs(source_index);
-      //TODO not enough to check for valid ratel block
-      if strcmp(typeof(source_block), 'Block') ~= 0,
-        ratel_log('not a valid ratel block\n', [fname, 'error']);
+      if typeof(source_block) ~= 'Block',
+        ratel_log(mprintf('need a Block as link source not %s',typeof(source_block))+'\n', [fname, 'error']);
+        return
       end
-      graphics = source_block.graphics;
-      label = graphics.exprs(1);
+      if typeof(source_block.model) ~= 'fpmodel',
+        ratel_log('ignoring link as non fpmodel source Block\n', [fname]);
+        continue
+      end
+      
+      if tgt_index > length(diagram.objs),
+        msg = msprintf('target index (%d) for link (%d) exceeds number of blocks (%d)', tgt_index, link_index, length(diagram.objs));
+        ratel_log(msg+'\n', [fname, 'error']);
+        return;
+      end
 
-      //we use the port index to uniquely identify the port
-      //TODO use the port name as well
-      link_name = msprintf('%s%d', label, source_port);
+      tgt_block = diagram.objs(tgt_index);
+      if typeof(tgt_block) ~= 'Block',
+        ratel_log(mprintf('need a Block as link source not %s',typeof(tgt_block))+'\n', [fname, 'error']);
+        return
+      end
+      if typeof(tgt_block.model) ~= 'fpmodel',
+        ratel_log('ignoring link as non fpmodel target Block\n', [fname]);
+        continue
+      end
 
-      //TODO width calculation
+      src_g = source_block.graphics;
+      if source_port > length(src_g.out_label),
+        ratel_log('link source port does not have a label\n', [fname, 'error']);
+        return
+      end
+      //we generate the wire names from combination of id and port name (see block2verilog) 
+      src_name = msprintf('%s%s', src_g.id, src_g.out_label(source_port));
+      
+      tgt_g = tgt_block.graphics;
+      if tgt_port > length(tgt_g.in_label),
+        ratel_log('link target port does not have a label\n', [fname, 'error']);
+        return
+      end
+      //we generate the wire names from combination of id and port name (see block2verilog) 
+      tgt_name = msprintf('%s%s', tgt_g.id, tgt_g.in_label(tgt_port));
 
-      mfprintf(fd, '\twire %s;\n', link_name);
+      //TODO how do clock links work?
+
+      mfprintf(fd, '\tassign %s = %s;\n', tgt_name, src_name)
+
     end //if     
   end //for
   ok = %t;
