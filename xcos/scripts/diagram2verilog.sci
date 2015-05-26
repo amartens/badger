@@ -268,7 +268,7 @@ endfunction //verilog_epilogue
 function[diagram_hdl, ok] = blocks2verilog(fd, diagram)
 //convert xcos blocks in diagram to verilog
   ok = %f; diagram_hdl = []; fname = 'blocks2verilog';
-  ignore_blocks = ['inport', 'outport'] //TODO other block types?
+  ignore_blocks = ['inport', 'outport', 'inout'] //TODO other block types?
 
   for index = 1:length(diagram.objs),
     obj = diagram.objs(index)

@@ -748,8 +748,8 @@ function[bllst, ok] = fpmodels(blklst)
     blk = blklst(n)
     if ~isempty(find(blk.intyp == 9)) | ~isempty(find(blk.outtyp == 9))
       li = length(blk.in); lo = length(blk.out);
-      insign = repmat(-1,li,1); innbits = repmat(-1, li, 1); inbinpt = repmat(-1, li, 1);
-      outsign = repmat(-1,lo,1); outnbits = repmat(-1, lo, 1); outbinpt = repmat(-1, lo, 1);
+      insign = repmat(-1, li, 1); innbits = repmat(-1, li, 1); inbinpt = repmat(-1, li, 1);
+      outsign = repmat(-1, lo, 1); outnbits = repmat(-1, lo, 1); outbinpt = repmat(-1, lo, 1);
       blklst(n) = tlist(['fpmodel', ..
       "sim","in","in2","intyp","out","out2","outtyp",...
       "insign","innbits","inbinpt","outsign","outnbits","outbinpt",...
@@ -840,7 +840,6 @@ function[bllst, ok] = adjust_fp(bllst, connectmat)
             //update the list with the new blk and get
             //fixed point info from it   
             bllst(connectmat(jj,1)) = blk
-            ratel_log(msprintf('%d %d %d %d',srcport_idx,length(blk.outsign),length(blk.outnbits),length(blk.outbinpt))+'\n', [fname])
             srcsign = blk.outsign(srcport_idx)
             srcnbits = blk.outnbits(srcport_idx)
             srcbinpt = blk.outbinpt(srcport_idx)
@@ -931,12 +930,11 @@ function [adjusted_diagram, ok] = adjust_models(blklst, cor, diagram, offset)
     obj = d_temp.objs(obj_index);
 
     if typeof(obj) == 'Block' then
-      updated_obj = obj;  
       blk_type = obj.gui;
 
       //if we have a superblock we update the models in it  
       if blk_type == 'SUPER_f' then
-        msg = msprintf('updating models in superblock found at %d', obj_index);
+        msg = msprintf('updating models in superblock found at [%d]', obj_index);
         ratel_log(msg+'\n', [fname]);
         //update superblock
         [d_sup, ko] = adjust_models(blklst, cor, obj.model.rpar, list(offset(:), obj_index));
@@ -946,10 +944,15 @@ function [adjusted_diagram, ok] = adjust_models(blklst, cor, diagram, offset)
         end //if
 
         //update the adjusted diagram with updated superblock
-        d_temp.objs(obj_index).model.rpar = d_sup;
+        msg = msprintf('updating objects at [%d] with updated superblock', obj_index);
+        ratel_log(msg+'\n', [fname]);
+        obj.model.rpar = d_sup;
 
       //otherwise we have a normal block to be updated from blklst
       else, 
+        msg = msprintf('updating %s ''%s'' at [%d]', blk_type, obj.graphics.exprs(1), obj_index);
+        ratel_log(msg+'\n', [fname]);
+
         location = cor(list(offset(:), obj_index));
       
         //cor contains a 0 for the location if the block has been excluded during c_pass1
@@ -959,19 +962,18 @@ function [adjusted_diagram, ok] = adjust_models(blklst, cor, diagram, offset)
             if loci ~= 1 then loc_str = loc_str+','; end //if
             loc_str = loc_str+msprintf('%d',location(loci));
           end //for
-          msg = msprintf('found %s ''%s'' at location [%s]', blk_type, obj.graphics.exprs(1), loc_str);
+          msg = msprintf('found %s ''%s'' at [%s] in blklst', blk_type, obj.graphics.exprs(1), loc_str);
           ratel_log(msg+'\n', [fname]);
         
           //update model 
           obj.model = blklst(location);
-          updated_obj = obj;
         else,
-          ratel_log(msprintf('%s %s excluded from update', blk_type, obj.graphics.exprs(1))+'\n', [fname]);
+          ratel_log(msprintf('%s ''%s'' at [%d] not in blklst', blk_type, obj.graphics.exprs(1), obj_index)+'\n', [fname]);
         end //if location
       end //if super_block
 
       //update diagram with updated object 
-      d_temp.objs(obj_index) = updated_obj;
+      d_temp.objs(obj_index) = obj;
     end // if Block
   end //for
     

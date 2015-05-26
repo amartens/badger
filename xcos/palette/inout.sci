@@ -5,15 +5,14 @@ function [x, y, typ] = inout(job, arg1, arg2)
     case 'define' then
       model = scicos_model();
 
+      model.sim = list('inout', 4)
+
       //all input parameters are determined from source    
-      model.in = 1; model.intyp = [-2];  
-      model.insign = [-2]; model.innbits = [-2]; model.inbinpt = [-2];
+      model.in = 1; model.intyp = [-1];  
       
       //all output parameters are determined from source    
-      model.out = 1; model.outtyp = [-2]; 
-      model.outsign = [-2]; model.outnbits = [-2]; model.outbinpt = [-2];
+      model.out = 1; model.outtyp = [-1]; 
       
-      //this must be a list, not a struct apparently
       model.ipar = arg1; //1 = input, 0 = output
 
       //create scicos block with standard settings  
