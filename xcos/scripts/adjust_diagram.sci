@@ -739,6 +739,29 @@ function [ok,bllst]=adjust_typ(bllst,connectmat)
   end
 endfunction //adjust_typ
 
+function [bl, ok] = fpmodel(blk)
+//convert model to fpmodel
+  ok = %f; bl = [];
+  
+  li = length(blk.in); lo = length(blk.out);
+  insign = repmat(-1, li, 1); innbits = repmat(-1, li, 1); inbinpt = repmat(-1, li, 1);
+  outsign = repmat(-1, lo, 1); outnbits = repmat(-1, lo, 1); outbinpt = repmat(-1, lo, 1);
+  bl = tlist(['fpmodel',...
+  "sim","in","in2","intyp","out","out2","outtyp",...
+  "insign","innbits","inbinpt","outsign","outnbits","outbinpt",...
+  "evtin","evtout","state","dstate","odstate","rpar","ipar","opar",...
+  "blocktype","firing","dep_ut","label","nzcross",...
+  "nmode","equations","uid"],...
+  blk.sim, blk.in, blk.in2, blk.intyp,...
+  blk.out, blk.out2, blk.outtyp,...
+  insign, innbits, inbinpt, outsign, outnbits, outbinpt,...
+  blk.evtin, blk.evtout, blk.state, blk.dstate, blk.odstate,...
+  blk.rpar, blk.ipar, blk.opar, blk.blocktype, blk.firing,...
+  blk.dep_ut, blk.label, blk.nzcross, blk.nmode, blk.equations, blk.uid)
+
+  ok = %t
+endfunction //fpmodel
+
 function[bllst, ok] = fpmodels(blklst)
 //fpmodels: converts models using fixed point type (9) to fpmodels
   ok = %f; bllst = [];
@@ -747,21 +770,8 @@ function[bllst, ok] = fpmodels(blklst)
   for n = 1:length(blklst)
     blk = blklst(n)
     if ~isempty(find(blk.intyp == 9)) | ~isempty(find(blk.outtyp == 9))
-      li = length(blk.in); lo = length(blk.out);
-      insign = repmat(-1, li, 1); innbits = repmat(-1, li, 1); inbinpt = repmat(-1, li, 1);
-      outsign = repmat(-1, lo, 1); outnbits = repmat(-1, lo, 1); outbinpt = repmat(-1, lo, 1);
-      blklst(n) = tlist(['fpmodel', ..
-      "sim","in","in2","intyp","out","out2","outtyp",...
-      "insign","innbits","inbinpt","outsign","outnbits","outbinpt",...
-      "evtin","evtout","state","dstate","odstate","rpar","ipar","opar",...
-      "blocktype","firing","dep_ut","label","nzcross",..
-      "nmode","equations","uid"],..
-      blk.sim, blk.in, blk.in2, blk.intyp,...
-      blk.out, blk.out2, blk.outtyp,...
-      insign, innbits, inbinpt, outsign, outnbits, outbinpt,...
-      blk.evtin, blk.evtout, blk.state, blk.dstate, blk.odstate,...
-      blk.rpar, blk.ipar, blk.opar, blk.blocktype, blk.firing,...
-      blk.dep_ut, blk.label, blk.nzcross, blk.nmode, blk.equations, blk.uid);
+      [bl, ko] = fpmodel(blk)
+      blklst(n) = bl
     end //if
   end //for
 
@@ -943,10 +953,28 @@ function [adjusted_diagram, ok] = adjust_models(blklst, cor, diagram, offset)
           ratel_log(msg+'\n', [fname, 'error']);
         end //if
 
+        inouts = find_blocks_of_type('inout', d_sup, 0)
+        //use inout info to update labels and fixed point info
+        for n = 1:size(inouts),
+          //only convert superblock if passing fixed point info
+          if typeof(inouts(n).model) == 'fpmodel',
+            msg = msprintf('converting model for superblock at offset [%d] to fpmodel', obj_index)
+            ratel_log(msg+'\n', [fname])
+            [fpm, ko] = fpmodel(obj.model)
+            if ~ko, 
+              msg = msprintf('error while converting model for superblock at offset [%d] to fpmodel', obj_index)
+              ratel_log(msg+'\n', [fname, 'error'])
+            end //if
+            obj.model = fpm
+            break //for
+          end //if
+        end //for 
+        
         //update the adjusted diagram with updated superblock
         msg = msprintf('updating objects at [%d] with updated superblock', obj_index);
         ratel_log(msg+'\n', [fname]);
-        obj.model.rpar = d_sup;
+        
+        obj.model.rpar = d_sup
 
       //otherwise we have a normal block to be updated from blklst
       else, 

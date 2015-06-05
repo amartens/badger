@@ -16,7 +16,7 @@ function [x, y, typ] = inout(job, arg1, arg2)
       model.ipar = arg1; //1 = input, 0 = output
 
       //create scicos block with standard settings  
-      //TODO input and output labels 
-      x = ratel_block_gen([2 1], model, [""], [], []);
+      //id, input and outputs labels are all port name
+      x = ratel_block_gen([2 1], model, [arg2], [arg2], [arg2]);
   end
 endfunction

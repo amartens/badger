@@ -300,10 +300,11 @@ endfunction //blocks2verilog
 function[ok] = block2verilog(fd, blk)
   ok = %f
 
-  //*************************//
-  // determine name of block //
-  //*************************//
+  //block type  
+  //simulation model is linked to verilog
+  blk_type = blk.model.sim(1)
 
+  //instance
   gui = blk.gui; id = blk.graphics.id; label = blk.model.label;   
   
   //use graphical id if available
@@ -314,16 +315,33 @@ function[ok] = block2verilog(fd, blk)
   else, blk_name = msprintf('%s%d', gui, index);
   end
 
-      //mfprintf(fd, '\twire %s;\n', link_name);
   //input labels
-  //TODO
+  labels_in = blk.graphics.in_label
 
   //output labels
-  //TODO
+  labels_out = blk.graphics.out_label
+
+  labels = [labels_in(:); labels_out(:)]
 
   //clocks in
+  //TODO
 
   //clocks out
+  //TODO
+
+  //parameters
+  //TODO
+
+  ratel_log(msprintf('adding %s of type %s', blk_name, blk_type)+'\n', {'error', [fname]})
+  mfprintf(fd, '\t%s %s', blk_type, blk_name)
+  if ~isempty(labels),
+    mfprintf(fd, '(')
+    for idx = 1:size(labels),
+      mfprintf(fd, '\t.%s(%s_%s),\n', labels(index), blk_name, labels(index))
+    end //for
+    mfprintf(fd, ')')
+  end //if
+  mfprintf(fd, ';/n')
 
   ok = %t
 endfunction //block2verilog

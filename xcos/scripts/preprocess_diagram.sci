@@ -110,8 +110,7 @@ function[diagram_with_helpers, ok] = add_port_helpers(diagram)
         lnk.to = [n_objs+1, 1, 1] 
 
         //construct input helper block
-        io = inout('define', 'input')
-        io.graphics.exprs(1) = msprintf('%s%s', obj.gui, obj.graphics.exprs(1))
+        io = inout('define', 1, msprintf('%s%s', obj.gui, obj.graphics.exprs(1)))
         pout = obj.graphics.pout    
 
         //link helper to input port's links
@@ -140,8 +139,7 @@ function[diagram_with_helpers, ok] = add_port_helpers(diagram)
         lnk.to = [obj_i, 1, 1] 
 
         //construct output helper block
-        io = inout('define', 'output')
-        io.graphics.exprs(1) = msprintf('%s%s', obj.gui, obj.graphics.exprs(1))
+        io = inout('define', 0, msprintf('%s%s', obj.gui, obj.graphics.exprs(1)))
         pin = obj.graphics.pin
         //link helper to link into output port
         io.graphics.pin = pin       
