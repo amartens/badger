@@ -333,15 +333,15 @@ function[ok] = block2verilog(fd, blk)
   //TODO
 
   ratel_log(msprintf('adding %s of type %s', blk_name, blk_type)+'\n', {'error', [fname]})
-  mfprintf(fd, '\t%s %s', blk_type, blk_name)
+  mfprintf(fd, '\t%s %s\n', blk_type, blk_name)
   if ~isempty(labels),
-    mfprintf(fd, '(')
-    for idx = 1:size(labels),
-      mfprintf(fd, '\t.%s(%s_%s),\n', labels(index), blk_name, labels(index))
+    mfprintf(fd, '\t\t(\n')
+    for idx = 1:size(labels, 'r'),
+      mfprintf(fd, '\t\t.%s(%s_%s)', labels(idx, 1), blk_name, labels(idx, 1))
+      if idx ~= size(labels, 'r'), mfprintf(fd, ',\n'); end 
     end //for
-    mfprintf(fd, ')')
+    mfprintf(fd, '\n\t\t);\n\n')
   end //if
-  mfprintf(fd, ';/n')
 
   ok = %t
 endfunction //block2verilog
