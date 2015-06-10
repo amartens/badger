@@ -743,9 +743,9 @@ function [bl, ok] = fpmodel(blk)
 //convert model to fpmodel
   ok = %f; bl = [];
   
-  li = length(blk.in); lo = length(blk.out);
-  insign = repmat(-1, li, 1); innbits = repmat(-1, li, 1); inbinpt = repmat(-1, li, 1);
-  outsign = repmat(-1, lo, 1); outnbits = repmat(-1, lo, 1); outbinpt = repmat(-1, lo, 1);
+  li = length(blk.in); lo = length(blk.out)
+  insign = repmat(-1, li, 1); innbits = repmat(-1, li, 1); inbinpt = repmat(-1, li, 1)
+  outsign = repmat(-1, lo, 1); outnbits = repmat(-1, lo, 1); outbinpt = repmat(-1, lo, 1)
   bl = tlist(['fpmodel',...
   "sim","in","in2","intyp","out","out2","outtyp",...
   "insign","innbits","inbinpt","outsign","outnbits","outbinpt",...
@@ -953,22 +953,63 @@ function [adjusted_diagram, ok] = adjust_models(blklst, cor, diagram, offset)
           ratel_log(msg+'\n', [fname, 'error']);
         end //if
 
+        msg = msprintf('updating port info for superblock at offset [%d]', obj_index)
+        ratel_log(msg+'\n', [fname])
+        //use inout blocks to get port information for superblock
         inouts = find_blocks_of_type('inout', d_sup, 0)
-        //use inout info to update labels and fixed point info
+        fpmc = 0; 
+
+        //use inout info to update labels and fixed point info for superblock
         for n = 1:size(inouts),
+          inout = inouts(n)
           //only convert superblock if passing fixed point info
-          if typeof(inouts(n).model) == 'fpmodel',
-            msg = msprintf('converting model for superblock at offset [%d] to fpmodel', obj_index)
-            ratel_log(msg+'\n', [fname])
-            [fpm, ko] = fpmodel(obj.model)
-            if ~ko, 
-              msg = msprintf('error while converting model for superblock at offset [%d] to fpmodel', obj_index)
+          if typeof(inout.model) == 'fpmodel',
+            if ~fpmc,
+              msg = msprintf('converting model for superblock at offset [%d] to fpmodel', obj_index)
+              ratel_log(msg+'\n', [fname])
+              [fpm, ko] = fpmodel(obj.model)
+              if ~ko, 
+                msg = msprintf('error while converting model for superblock at offset [%d] to fpmodel', obj_index)
+                ratel_log(msg+'\n', [fname, 'error'])
+              end //if
+              fpm.innbits = []; fpm.inbinpt = []; fpm.insign = []
+              fpm.outnbits = []; fpm.outbinpt = []; fpm.outsign = []
+              in_label = []; out_label = []
+              fpmc = 1
+            end //if ~fpmc
+   
+            //TODO this adds ports in the order we find them, if we want a specific order
+            //then we need a way to index them. This is probably not a problem for superblocks
+            //as label is a better identifier than index 
+            if inout.model.ipar == 1,
+              msg = msprintf('%s sign(%d) [%d %d]', inout.graphics.exprs, inout.model.insign, inout.model.innbits, inout.model.inbinpt)
+              ratel_log(msg+'\n', [fname])
+              in_label($+1) = inout.graphics.exprs
+              fpm.innbits($+1) = inout.model.innbits 
+              fpm.inbinpt($+1) = inout.model.inbinpt 
+              fpm.insign($+1) = inout.model.insign 
+            elseif inout.model.ipar == 0, 
+              msg = msprintf('%s sign(%d) [%d %d]', inout.graphics.exprs, inout.model.outsign, inout.model.outnbits, inout.model.outbinpt)
+              ratel_log(msg+'\n', [fname])
+              out_label($+1) = inout.graphics.exprs
+              fpm.outnbits($+1) = inout.model.outnbits 
+              fpm.outbinpt($+1) = inout.model.outbinpt 
+              fpm.outsign($+1) = inout.model.outsign 
+            else,
+              msg = msprintf('inout has invalid ipar value %d', inout.model.ipar)
               ratel_log(msg+'\n', [fname, 'error'])
             end //if
-            obj.model = fpm
-            break //for
+                
           end //if
         end //for 
+        if fpmc, 
+          obj.model = fpm
+          obj.graphics.out_label = out_label
+          obj.graphics.in_label = in_label
+        end
+              
+        msg = msprintf('ended with %d fixed point inputs and %d outputs', length(obj.graphics.in_label), length(obj.graphics.out_label))
+        ratel_log(msg+'\n', [fname])
         
         //update the adjusted diagram with updated superblock
         msg = msprintf('updating objects at [%d] with updated superblock', obj_index);
