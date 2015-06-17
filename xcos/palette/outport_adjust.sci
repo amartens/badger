@@ -11,7 +11,7 @@ function [x] = outport_adjust(job, arg1)
       obj = arg1
       //in/outports have no block id but are uniquely identified by port name
       obj.graphics.id = ''
-      obj.graphics.in_label = [obj.graphics.exprs(1)]
+      obj.graphics.in_label = ''
       x = obj
   end //select
 endfunction

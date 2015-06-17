@@ -8,12 +8,12 @@ function [x] = inport_adjust(job, arg1)
       fpm.outsign = fpm.ipar(1); fpm.outnbits = fpm.ipar(2); fpm.outbinpt = fpm.ipar(3)
       x = fpm
     case 'hdl' then
-      //in this case arg1 is an object consisting of fpmodel, graphics etc
+      //in this case arg1 is a Block
       ratel_log('adjusting graphics info for ''inport'' hdl generation\n', [fname]);
       obj = arg1
       //in/outports have no block id but are uniquely identified by port name
       obj.graphics.id = ''
-      obj.graphics.out_label = [obj.graphics.exprs(1)]
+      obj.graphics.out_label = ''
       x = obj
   end //select
 endfunction
