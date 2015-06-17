@@ -17,6 +17,6 @@ function [x, y, typ] = inout(job, arg1, arg2)
 
       //create scicos block with standard settings  
       //id, input and outputs labels are all port name
-      x = ratel_block_gen([2 1], model, [arg2], [arg2], [arg2]);
+      x = ratel_block_gen([2 1], model, [arg2], [''], ['']);
   end
 endfunction
