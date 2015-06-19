@@ -133,19 +133,19 @@ function[ok] = verilog_intro(fd, diagram)
     port = inports(idx)
     nbits = port.model.outnbits
     if isempty(nbits),
-      msg = msprintf('port %s has empty dimensions', port.graphics.exprs(1))
+      msg = msprintf('port %s has empty dimensions', port.graphics.id)
       ratel_log(msg+'\n', [fname, 'error'])
       return
     end //if
     if nbits < 0,
-      msg = msprintf('port %s has not resolved dimensions yet', port.graphics.exprs(1))
+      msg = msprintf('port %s has not resolved dimensions yet', port.graphics.id)
       ratel_log(msg+'\n', [fname, 'error'])
       return
     end //if
     inports_nbits($+1) = nbits
     inports_directions($+1) = 'input'
   
-    msg = msprintf('inport found with name %s and size %d', port.graphics.exprs(1), nbits)
+    msg = msprintf('inport found with name %s and size %d', port.graphics.id, nbits)
     ratel_log(msg+'\n', [fname])
   end //for
 
@@ -161,19 +161,19 @@ function[ok] = verilog_intro(fd, diagram)
     port = outports(idx)
     nbits = port.model.innbits
     if isempty(nbits),
-      msg = msprintf('port %s has empty dimensions', port.graphics.exprs(1))
+      msg = msprintf('port %s has empty dimensions', port.graphics.id)
       ratel_log(msg+'\n', [fname, 'error'])
       return
     end //if
     if nbits < 0,
-      msg = msprintf('port %s has not resolved dimensions yet', port.graphics.exprs(1))
+      msg = msprintf('port %s has not resolved dimensions yet', port.graphics.id)
       ratel_log(msg+'\n', [fname, 'error'])
       return
     end //if
     outports_nbits($+1) = nbits
     outports_directions($+1) = 'output'
     
-    msg = msprintf('outport found with name %s and size %d', port.graphics.exprs(1), nbits)
+    msg = msprintf('outport found with name %s and size %d', port.graphics.id, nbits)
     ratel_log(msg+'\n', [fname])
   end //for
 
@@ -189,12 +189,12 @@ function[ok] = verilog_intro(fd, diagram)
     port = inouts(idx)
     nbits = port.model.innbits
     if isempty(nbits),
-      msg = msprintf('port %s has empty dimensions', port.graphics.exprs(1))
+      msg = msprintf('port %s has empty dimensions', port.graphics.id)
       ratel_log(msg+'\n', [fname, 'error'])
       return
     end //if
     if nbits < 0,
-      msg = msprintf('port %s has not resolved dimensions yet', port.graphics.exprs(1))
+      msg = msprintf('port %s has not resolved dimensions yet', port.graphics.id)
       ratel_log(msg+'\n', [fname, 'error'])
       return
     end //if
@@ -205,11 +205,11 @@ function[ok] = verilog_intro(fd, diagram)
     elseif iotype == 1,
       inoutports_directions($+1) = 'input'
     else,
-      msg = msprintf('port %s has unrecognised type %d', port.graphics.exprs(1), iotype)
+      msg = msprintf('port %s has unrecognised type %d', port.graphics.id, iotype)
       ratel_log(msg+'\n', [fname, 'error'])
       return
     end //if iotype
-    msg = msprintf('%s port found with name %s and size %d', inoutports_directions($), port.graphics.exprs(1), nbits)
+    msg = msprintf('%s port found with name %s and size %d', inoutports_directions($), port.graphics.id, nbits)
     ratel_log(msg+'\n', [fname])
   end //for
 
@@ -272,14 +272,7 @@ function[ok, nports] = ports2verilog(fd, ports_directions, ports_nbits, ports)
     if port_nbits > 0,
       port_direction = ports_directions(idx)
       port = ports(idx)
-      if port_direction == 'input',
-        port_name = port.graphics.exprs(1)
-      elseif port_direction == 'output'
-        port_name = port.graphics.exprs(1)
-      else,
-        msg = msprintf('unknown port direction %s', port_direction)
-        ratel_log(msg+'\n', ['error', fname])
-      end
+      port_name = port.graphics.id
       
       mfprintf(fd, '\t%s ', port_direction)
       if port_nbits > 1,
@@ -303,20 +296,7 @@ function[diagram_hdl, ok] = blocks2verilog(fd, diagram, target)
     obj = diagram.objs(index)
     //we only convert blocks with fixed point models to verilog
     if typeof(obj) == 'Block' & typeof(obj.model) == 'fpmodel',
-      [blk, ko] = block_adjust('hdl', obj),
-      if ~ko,
-        msg = msprintf('error while getting hdl info for %s %d:', obj.gui, index)
-        ratel_log(msg+'\n', ['error', fname])
-      end
-
-      //we get the block name in context with the rest of the system
-      block_name = determine_blk_name(blk, index)
-      //and save it for future use
-      blk.graphics.id = block_name
-
-      //we will need some of this info for links etc so save it
-      diagram.objs(index) = blk
-
+      blk = obj
       //generate superblocks
       if blk.model.sim == 'super',
         ratel_log(msprintf('converting innards of %s to verilog', blk.graphics.id)+'\n', [fname])
@@ -326,7 +306,7 @@ function[diagram_hdl, ok] = blocks2verilog(fd, diagram, target)
         end //if
       end //if 
  
-      //we ignore certain blocks as they are handled differently
+      //we ignore certain blocks as they are handled differently (e.g ports)
       if ~or(obj.gui==ignore_blocks),
         ratel_log(msprintf('converting %s to verilog', blk.graphics.id)+'\n', [fname])
         ko = block2verilog(fd, blk)
@@ -345,18 +325,11 @@ endfunction //blocks2verilog
 function[ok] = block2verilog(fd, blk)
   ok = %f
 
+  //instance name
   blk_name = blk.graphics.id
 
   //block type  
-  //simulation model is linked to verilog
-  sim = blk.model.sim(1)
-  if sim == 'super', 
-    //verilog module is linked to ratel-generated verilog
-    blk_type = msprintf('my_%s', blk_name)
-  else,  
-    //verilog module is linked to simulation model
-    blk_type = sim
-  end
+  blk_type = blk.model.label
 
   //input labels
   labels_in = blk.graphics.in_label
@@ -404,23 +377,6 @@ function[ok] = block2verilog(fd, blk)
 
   ok = %t
 endfunction //block2verilog
-
-function[blk_name] = determine_blk_name(blk, index)
-  //instance
-  gui = blk.gui; id = blk.graphics.id; 
-  label = blk.model.label; exprs = blk.graphics.exprs(1)   
-
-  //use graphical id if available
-  if ~isempty(id), blk_name = id
-  //use model label if available
-  elseif ~isempty(label), blk_name = label
-  //use label show graphically if there
-  elseif ~isempty(exprs), blk_name = exprs
-  //use block type and index
-  else, blk_name = msprintf('%s%d', gui, index)
-  end
-  
-endfunction //determine_block_name
 
 function[ok] = links2verilog(fd, diagram)
 //convert xcos links in diagram to verilog
