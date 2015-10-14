@@ -26,8 +26,17 @@ function[preprocessed_diagram, ok] = preprocess_diagram(diagram)
 
   //TODO bubble inport and outport links to top by searching in all component superblocks for
   //inports and outports, and creating input and output ports and links in diagram
+
+//  ratel_log(msprintf('bubbling in/outports to top of diagram %s',dtitle)+'\n', [fname]);
+//  [temp, ko] = bubble_inoutports(temp);
+//  if ~ko,
+//    msg = msprintf('error while bubbling inouports of diagram %s',dtitle);
+//    ratel_log(msg+'\n', [fname, 'error']);
+//    return;
+//  end 
   
-  //TODO replace local GOTOs with real links 
+  //TODO replace local GOTOs with real links
+ 
   //TODO replace global GOTOs with real links. This may be easiest done by using c_pass1 to 
   //get connection info, then updating diagram using this
 
@@ -55,30 +64,66 @@ function[diagram_with_fp, ok] = introduce_fixed_point(diagram)
     obj = temp.objs(i)
     if typeof(obj) == 'Block',
       if or(obj.gui==fpblocks),
-        msg = msprintf('introducing fixed point to %s at offset %d', obj.gui, i);
-        ratel_log(msg+'\n', [fname]);
+        msg = msprintf('introducing fixed point to %s at offset %d', obj.gui, i)
+        ratel_log(msg+'\n', [fname])
         
         //convert all output ports to fixed point type
         obj.model.outtyp = repmat(9, length(obj.model.outtyp), 1)
         temp.objs(i) = obj
-      elseif obj.model.sim=="super"|obj.model.sim=="csuper" then
-        msg = msprintf('introducing fixed point to superblock at offset %d', i);
-        ratel_log(msg+'\n', [fname]);
+      elseif obj.model.sim=="super"|obj.model.sim=="csuper",
+        msg = msprintf('introducing fixed point to superblock at offset %d', i)
+        ratel_log(msg+'\n', [fname])
         
         //update superblock
-        [updated_super, ko] = introduce_fixed_point(obj.model.rpar);
-        if ~ko then
-          msg = msprintf('error while introducing fixed point in superblock found at %d', i);
-          ratel_log(msg+'\n', [fname, 'error']);
+        [updated_super, ko] = introduce_fixed_point(obj.model.rpar)
+        if ~ko,
+          msg = msprintf('error while introducing fixed point in superblock found at %d', i)
+          ratel_log(msg+'\n', [fname, 'error'])
         end //if
       
         //update diagram with updated super block
-        temp.objs(i).model.rpar = updated_super;
+        temp.objs(i).model.rpar = updated_super
       end //if fpblocks
     end //if Block
   end //for
   diagram_with_fp = temp; ok = %t
 endfunction //introduce_fixed_point
+
+//TODO
+function[bubbled_diagram, ok] = bubble_inoutports(diagram)
+//bubbles in/outports to top of diagram by creating them at the top level and
+//then descending into superblocks, adding links and removing the original ports
+  bubbled_diagram = []; ok = %f
+  fname = 'bubble_inoutports'
+  temp = diagram
+
+  //find all inports in system
+  ratel_log('locating inports\n', [fname])
+  [inports, iindices, ko] = find_blocks_of_type('inport', temp, %inf)
+  if ~ko,  
+    msg = msprintf('error while locating inports')
+    ratel_log(msg+'\n', [fname, 'error'])
+  end //if
+
+  //go through inports
+  for index = 1:length(inports),
+  //add new inport in top system
+    inport = inports(index); iindex = iindices(index)
+    lo = length(temp.objs)
+    msg = msprintf('adding inport %s to top at position %d', inport.exprs(1), lo)
+    ratel_log(msg+'\n', [fname])
+    temp.objs($+1) = inport
+    
+  //go through iindices for each inport
+  //add link from inport/input gateway to superblock
+  //modify superblock model to include new input gateway
+  //go into superblock
+  //add new input gateway
+  //at bottom level replace inport with input gateway
+  end //for
+
+  bubbled_diagram = temp; ok = %t
+endfunction //bubble_inoutports
 
 function[diagram_with_helpers, ok] = add_port_helpers(diagram)
 //adds blocks after input ports and before output ports that will not
