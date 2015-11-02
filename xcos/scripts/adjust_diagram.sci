@@ -1,3 +1,18 @@
+//This file is part of ratel.
+//
+//    ratel is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    ratel is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with ratel.  If not, see <http://www.gnu.org/licenses/>.
+
 function [adjusted_diagram, ok] = adjust_diagram(diagram)
 //various diagram sanity checks, determines port types etc
 //returns updated diagram
@@ -68,7 +83,8 @@ function [adjusted_diagram, ok] = adjust_diagram(diagram)
   ok = %t;
 endfunction //adjust_diagram
 
-//taken from c_pass2
+//taken from c_pass2 in scilab source
+
 //adjust_inout : it resolves positive, negative and null size
 //               of in/out port dimensions of connected block.
 //               If it's not done in a first pass, the second 
