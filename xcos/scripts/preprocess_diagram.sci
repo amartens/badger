@@ -42,13 +42,13 @@ function[preprocessed_diagram, ok] = preprocess_diagram(diagram)
   //TODO bubble inport and outport links to top by searching in all component superblocks for
   //inports and outports, and creating input and output ports and links in diagram
 
-//  ratel_log(msprintf('bubbling in/outports to top of diagram %s',dtitle)+'\n', [fname]);
-//  [temp, ko] = bubble_inoutports(temp);
-//  if ~ko,
-//    msg = msprintf('error while bubbling inouports of diagram %s',dtitle);
-//    ratel_log(msg+'\n', [fname, 'error']);
-//    return;
-//  end 
+  ratel_log(msprintf('bubbling in/outports to top of diagram %s',dtitle)+'\n', [fname]);
+  [temp, ko] = bubble_inoutports(temp);
+  if ~ko,
+    msg = msprintf('error while bubbling inouports of diagram %s',dtitle);
+    ratel_log(msg+'\n', [fname, 'error']);
+    return;
+  end 
   
   //TODO replace local GOTOs with real links
  
@@ -119,26 +119,61 @@ function[bubbled_diagram, ok] = bubble_inoutports(diagram)
     msg = msprintf('error while locating inports')
     ratel_log(msg+'\n', [fname, 'error'])
   end //if
+  msg = msprintf('%d inports found\n', length(inports))
+  ratel_log(msg+'\n', [fname])
 
   //go through inports
-  for index = 1:length(inports),
-  //add new inport in top system
-    inport = inports(index); iindex = iindices(index)
+  for inport_index = 1:length(inports),
+    //add new inport in top system
+    inport = inports(inport_index); inport_indices = iindices(inport_index)
     lo = length(temp.objs)
-    msg = msprintf('adding inport %s to top at position %d', inport.exprs(1), lo)
-    ratel_log(msg+'\n', [fname])
-    temp.objs($+1) = inport
-    
-  //go through iindices for each inport
-  //add link from inport/input gateway to superblock
-  //modify superblock model to include new input gateway
-  //go into superblock
-  //add new input gateway
-  //at bottom level replace inport with input gateway
+
+    //if inport is at top level, skip
+    if length(inport_indices) == 1,
+      msg = msprintf('skipping inport ''%s'' at top level', inport.graphics.exprs(1))
+      ratel_log(msg+'\n', [fname])
+      continue
+    else,
+      msg = msprintf('adding inport ''%s'' to top at position %d', inport.graphics.exprs(1), lo)
+      ratel_log(msg+'\n', [fname])
+    end
+
+    src = inport
+ 
+    //go through indices for each inport
+    for index = 1:length(inport_indices),
+
+
+    end //for
   end //for
 
   bubbled_diagram = temp; ok = %t
 endfunction //bubble_inoutports
+
+function[bubbled_diagram, ok] = bubble_port(diagram, location)
+//bubbles a single in/outport up from location within diagram using recursion
+//at lowest level in/outport is replaced with in/out gateway
+  bubbled_diagram = []; ok = %f
+
+  //if at bottom level
+  if index == length(inport_indices),
+    //remove inport
+    //replace with input gateway
+    ingi = index  
+  else,
+    //add new input gateway
+    ingi = length(temp.objs)+1
+
+    //add link from src to superblock
+    
+    //modify superblock model to include src
+    temp.objs($+1) = src
+    //go into superblock
+    src = temp.objs(index)
+    temp = temp.objs(index).model.rpar
+  end //if
+
+endfunction //bubble_port
 
 function[diagram_with_helpers, ok] = add_port_helpers(diagram)
 //adds blocks after input ports and before output ports that will not
